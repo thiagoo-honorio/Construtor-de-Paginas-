@@ -51,6 +51,7 @@
     let historico = [];
     let refazerPilha = [];
     let imagemAlvoId = null;
+    let imagemUrlSemSrcNoFoco = false;
     let modalResolver = null;
     let refs = {};
     let sequencia = 0;
@@ -204,7 +205,7 @@
         const extra = {
             texto: { html: '<p>Escreva seu texto aqui.</p>', alinhamento: 'left' },
             titulo: { texto: 'Novo título', nivel: 'h3', alinhamento: 'left' },
-            imagem: { src: '', alt: '', legenda: '', largura: 100, alinhamento: 'center' },
+            imagem: { src: '', alt: '', legenda: '', largura: 100, alinhamento: 'center', pequena: false, textoLado: '', textoLadoAtivo: false },
             link: { texto: 'Saiba mais', href: '', novaAba: true, estilo: 'botao', alinhamento: 'left' },
             lista: { html: '<ul><li>Primeiro item</li><li>Segundo item</li></ul>', alinhamento: 'left' },
             citacao: { html: '<p>Uma ideia que merece destaque.</p>', autor: '', alinhamento: 'left' },
@@ -463,6 +464,10 @@
             b.alt = texto(bruto.alt, 300);
             b.legenda = texto(bruto.legenda, 300);
             b.largura = Math.min(100, Math.max(15, parseInt(bruto.largura, 10) || 100));
+            b.pequena = bruto.pequena === true;
+            b.textoLado = sanitizarHTML(bruto.textoLado);
+            b.textoLadoAtivo = bruto.textoLadoAtivo === true;
+            if (b.textoLadoAtivo && b.largura > 70) b.largura = 70;
             b.alinhamento = alinhamento;
         } else if (tipo === 'link') {
             b.texto = texto(bruto.texto, 200) || 'Saiba mais';
@@ -794,6 +799,7 @@
             refs.modalInput2.setAttribute('aria-label', cfg.rotulo2 || cfg.titulo || 'Valor');
             refs.modalOk.textContent = cfg.ok || 'Confirmar';
             refs.modalOk.className = 'apb-btn ' + (cfg.perigo ? 'apb-btn--danger' : 'apb-btn--primary');
+            refs.modalCancel.textContent = cfg.cancelar || 'Cancelar';
             refs.modalCancel.hidden = !!cfg.ocultarCancelar;
             refs.modal.classList.add('apb-aberto');
             setTimeout(function () {
@@ -835,6 +841,23 @@
 
     function prompt(titulo, texto, valor, ok) {
         return abrirModal({ titulo: titulo, texto: texto, valor: valor || '', input: true, ok: ok || 'Criar' });
+    }
+
+    function abrirLightbox(src, alt) {
+        if (!refs.lightbox || !refs.lightboxImg || !src) return;
+        refs.lightboxImg.src = src;
+        refs.lightboxImg.alt = alt || '';
+        refs.lightbox.classList.add('apb-aberto');
+        if (refs.lightboxFechar) refs.lightboxFechar.focus({ preventScroll: true });
+    }
+
+    function fecharLightbox() {
+        if (!refs.lightbox) return;
+        refs.lightbox.classList.remove('apb-aberto');
+        if (refs.lightboxImg) {
+            refs.lightboxImg.src = '';
+            refs.lightboxImg.alt = '';
+        }
     }
 
 
@@ -939,6 +962,10 @@
         </div>
       </div>
     </div>
+    <div class="apb-lightbox" id="apbLightbox" role="dialog" aria-modal="true" aria-label="Imagem ampliada">
+      <button class="apb-lightbox-fechar" id="apbLightboxFechar" type="button" aria-label="Fechar imagem ampliada">×</button>
+      <img id="apbLightboxImg" src="" alt="">
+    </div>
     <div class="apb-toasts" id="apbToasts" aria-live="polite"></div>
   </div>
 </div>`;
@@ -970,6 +997,9 @@
             modalInput2: document.getElementById('apbModalInput2'),
             modalOk: document.getElementById('apbModalOk'),
             modalCancel: document.getElementById('apbModalCancel'),
+            lightbox: document.getElementById('apbLightbox'),
+            lightboxFechar: document.getElementById('apbLightboxFechar'),
+            lightboxImg: document.getElementById('apbLightboxImg'),
             toasts: document.getElementById('apbToasts'),
             btnBackup: document.getElementById('apbBackup')
         };
@@ -1016,6 +1046,7 @@
         esconderMenuExport();
         esconderFmtbar();
         fecharModal(null);
+        fecharLightbox();
         refs.root.classList.remove('apb-open', 'apb-show-left', 'apb-show-right');
         refs.root.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('apb-lock');
@@ -1175,8 +1206,21 @@
             conteudo = '<' + nivel + ' data-apb-field="texto" data-single-line="1">' + esc(b.texto) + '</' + nivel + '>';
         } else if (b.tipo === 'imagem') {
             if (b.src) {
-                conteudo = '<figure><img src="' + esc(b.src) + '" alt="' + esc(b.alt) + '" loading="lazy" style="width:' + b.largura + '%">' +
-                    '<figcaption data-apb-field="legenda" data-single-line="1" data-placeholder="Legenda (opcional)">' + esc(b.legenda) + '</figcaption></figure>';
+                const pequena = b.pequena === true;
+                const lado = b.textoLadoAtivo === true;
+                const figuraAberta = (pequena || lado)
+                    ? '<figure' + (pequena ? ' class="apb-figura-pequena"' : '') + ' style="width:' + b.largura + '%">'
+                    : '<figure>';
+                const larguraImg = (pequena || lado) ? 100 : b.largura;
+                const figura = figuraAberta + '<img src="' + esc(b.src) + '" alt="' + esc(b.alt) + '" loading="lazy" style="width:' + larguraImg + '%">' +
+                    '<figcaption data-apb-field="legenda" data-single-line="1" data-placeholder="Legenda (opcional)">' + esc(b.legenda) + '</figcaption>' +
+                    (pequena ? '<a class="apb-img-ampliar" href="#" data-apb-ampliar="' + esc(b.id) + '">Clique para ampliar a imagem</a>' : '') +
+                    '</figure>';
+                conteudo = lado
+                    ? '<div class="apb-img-texto">' + figura +
+                        '<div class="apb-rich apb-img-texto-conteudo" data-apb-field="textoLado" data-placeholder="Escreva o texto ao lado da imagem...">' + sanitizarHTML(b.textoLado) + '</div>' +
+                        '</div>'
+                    : figura;
             } else {
                 conteudo = '<div class="apb-img-placeholder"><span>Nenhuma imagem selecionada.</span>' +
                     '<button class="apb-btn apb-btn--sm" type="button" data-apb-img-escolher="1">Escolher imagem</button></div>';
@@ -1476,7 +1520,11 @@
                 '<button class="apb-btn apb-btn--sm" type="button" data-apb-block-action="upload">Enviar imagem do computador</button>' +
                 campo('Texto alternativo', 'blocoAlt', b.alt, { placeholder: 'Descreva a imagem para acessibilidade' }) +
                 campo('Legenda', 'blocoLegenda', b.legenda, { placeholder: 'Legenda (opcional)' }) +
-                campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: 100, step: 5, sufixo: '%' }) +
+                campo('Imagem pequena', 'blocoImagemPequena', b.pequena === true, { tipo: 'checkbox' }) +
+                '<p class="apb-hint">Quando marcada, a imagem fica reduzida e mostra “Clique para ampliar a imagem” embaixo dela.</p>' +
+                campo('Texto ao lado da imagem', 'blocoTextoLadoAtivo', b.textoLadoAtivo === true, { tipo: 'checkbox' }) +
+                (b.textoLadoAtivo ? '<p class="apb-hint">Escreva o texto no espaço ao lado da imagem, aqui no canvas. No celular ele desce para baixo da imagem.</p>' : '') +
+                campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: b.textoLadoAtivo ? 70 : 100, step: 5, sufixo: '%' }) +
                 campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
         } else if (b.tipo === 'link') {
             especifico = campo('Texto exibido no link', 'blocoTexto', b.texto, { placeholder: 'Ex.: Tutorial', hint: 'É o texto que o visitante vê e clica. O endereço fica só por trás dele.' }) +
@@ -1846,6 +1894,7 @@
             if (campo === 'html') b.html = sanitizarHTML(valor);
             else if (campo === 'texto') b.texto = texto(valor, 600);
             else if (campo === 'legenda') b.legenda = texto(valor, 300);
+            else if (campo === 'textoLado') b.textoLado = sanitizarHTML(valor);
             else if (campo === 'autor') b.autor = texto(valor, 160);
             else return;
         } else {
@@ -1935,7 +1984,56 @@
             if (!b.alt) b.alt = texto(String(nomeArquivo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' '), 200);
             selecao = { tipo: 'bloco', id: id };
         });
-        toast('Imagem adicionada. Ajuste o texto alternativo no painel de propriedades.', 'ok');
+        perguntarImagemPequena(id);
+    }
+
+    function perguntarImagemPequena(id) {
+        const b = acharBloco(id);
+        if (!b || !b.src) return;
+        abrirModal({
+            titulo: 'A imagem é pequena?',
+            texto: 'Escolha “Sim” para exibir a imagem em tamanho reduzido, com o texto “Clique para ampliar a imagem” embaixo dela. A largura pode ser ajustada depois no painel de propriedades.',
+            ok: 'Sim, imagem pequena',
+            cancelar: 'Não, tamanho normal'
+        }).then(function (res) {
+            if (res) {
+                definirImagemPequena(id, true);
+                return;
+            }
+            const atual = acharBloco(id);
+            if (atual && atual.pequena) definirImagemPequena(id, false);
+        });
+    }
+
+    function aplicarModoPequena(b, valor) {
+        const padrao = b.textoLadoAtivo ? 50 : 100;
+        const eraPequena = b.pequena === true;
+        b.pequena = !!valor;
+        if (b.pequena) {
+            if (b.largura >= padrao) b.largura = 40;
+        } else if (eraPequena && b.largura === 40) {
+            b.largura = padrao;
+        }
+    }
+
+    function aplicarTextoLado(b, valor) {
+        const era = b.textoLadoAtivo === true;
+        b.textoLadoAtivo = !!valor;
+        if (b.textoLadoAtivo) {
+            if (b.largura > 70) b.largura = b.pequena ? 40 : 50;
+        } else if (era && !b.pequena && b.largura === 50) {
+            b.largura = 100;
+        }
+    }
+
+    function definirImagemPequena(id, valor) {
+        const b = acharBloco(id);
+        if (!b) return;
+        registrar(function () {
+            aplicarModoPequena(b, valor);
+            selecao = { tipo: 'bloco', id: id };
+        });
+        if (b.pequena) toast('Imagem pequena: use “Largura” no painel para ajustar o tamanho.', 'ok', 5000);
     }
 
     function sincronizarCampoAtivo() {
@@ -2093,7 +2191,17 @@
             case 'blocoEstilo': b.estilo = v === 'link' ? 'link' : 'botao'; return true;
             case 'blocoNovaAba': b.novaAba = !!valor; return true;
             case 'blocoAltura': b.altura = Math.min(200, Math.max(8, parseInt(v, 10) || b.altura)); return true;
-            case 'blocoImagemLargura': b.largura = Math.min(100, Math.max(15, parseInt(v, 10) || b.largura)); return true;
+            case 'blocoImagemLargura': {
+                const maxLargura = b.textoLadoAtivo ? 70 : 100;
+                b.largura = Math.min(maxLargura, Math.max(15, parseInt(v, 10) || b.largura));
+                return true;
+            }
+            case 'blocoImagemPequena':
+                aplicarModoPequena(b, valor);
+                return true;
+            case 'blocoTextoLadoAtivo':
+                aplicarTextoLado(b, valor);
+                return true;
             case 'blocoImagemUrl': {
                 if (!v.trim()) { b.src = ''; return true; }
                 const segura = urlImagemSegura(v);
@@ -2141,6 +2249,7 @@
         }
         if (aplicou) {
             if (prop.indexOf('secao') === 0) renderSectionsList();
+            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo') renderInspector();
             marcarSujo();
             agendarCanvas();
         }
@@ -2339,6 +2448,11 @@
         refs.pagesList.addEventListener('click', aoClicarListaPaginas);
         refs.sectionsList.addEventListener('click', aoClicarListaSecoes);
 
+        refs.inspector.addEventListener('focusin', function (e) {
+            const el = e.target.closest ? e.target.closest('[data-apb-prop="blocoImagemUrl"]') : null;
+            const b = blocoAtual();
+            imagemUrlSemSrcNoFoco = !!(el && b && !b.src);
+        });
         refs.inspector.addEventListener('input', function (e) {
             const el = e.target.closest ? e.target.closest('[data-apb-prop]') : null;
             if (el) {
@@ -2397,7 +2511,10 @@
                     if (el.value.trim() && !b.src) toast('Endereço de imagem inválido ou muito grande.', 'erro');
                     el.value = b.src || '';
                 }
+                const devePerguntar = imagemUrlSemSrcNoFoco && b && b.src;
+                imagemUrlSemSrcNoFoco = false;
                 renderCanvas();
+                if (devePerguntar) perguntarImagemPequena(b.id);
             } else if (prop === 'blocoHref') {
                 if (b) {
                     if (el.value.trim() && !b.href) toast('Endereço inválido. Use http://, https://, mailto:, tel: ou #âncora.', 'erro');
@@ -2447,6 +2564,12 @@
         refs.modal.addEventListener('click', function (e) {
             if (e.target === refs.modal) fecharModal(null);
         });
+        if (refs.lightboxFechar) refs.lightboxFechar.addEventListener('click', fecharLightbox);
+        if (refs.lightbox) {
+            refs.lightbox.addEventListener('click', function (e) {
+                if (e.target === refs.lightbox) fecharLightbox();
+            });
+        }
         refs.modalInput.addEventListener('keydown', function (e) {
             if (e.key !== 'Enter') return;
             e.preventDefault();
@@ -2498,6 +2621,15 @@
     function aoClicarCanvas(e) {
         if (!aberto) return;
         const t = e.target;
+        const ampliar = t.closest ? t.closest('[data-apb-ampliar]') : null;
+        if (ampliar) {
+            e.preventDefault();
+            e.stopPropagation();
+            const blocoEl = ampliar.closest('[data-apb-block]');
+            const b = blocoEl ? acharBloco(blocoEl.dataset.apbBlock) : null;
+            if (b && b.src) abrirLightbox(b.src, b.alt);
+            return;
+        }
         const menuLink = t.closest ? t.closest('[data-apb-menu-pagina]') : null;
         if (menuLink) {
             e.preventDefault();
@@ -2646,6 +2778,7 @@
             e.preventDefault();
             e.stopPropagation();
             if (modalAberto) { fecharModal(null); return; }
+            if (refs.lightbox && refs.lightbox.classList.contains('apb-aberto')) { fecharLightbox(); return; }
             if (refs.exportMenu.classList.contains('apb-aberto')) { esconderMenuExport(); return; }
             if (previa) { sairDaPrevia(); return; }
             esconderFmtbar();
@@ -2696,9 +2829,33 @@
         if (b.tipo === 'imagem') {
             const src = urlImagemSegura(b.src);
             if (!src) return '';
+            const pequena = b.pequena === true;
+            const alvo = 'ampliar-' + String(b.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+            const linkAmpliar = pequena ? '<a class="img-ampliar" href="#' + alvo + '">Clique para ampliar a imagem</a>' : '';
+            const legenda = b.legenda ? '<figcaption>' + esc(b.legenda) + '</figcaption>' : '';
+            const lightbox = pequena
+                ? '<div class="img-lightbox" id="' + alvo + '" role="dialog" aria-label="Imagem ampliada">' +
+                    '<a class="img-lightbox-fechar" href="#" aria-label="Fechar imagem ampliada">×</a>' +
+                    '<img src="' + esc(src) + '" alt="' + esc(b.alt) + '"></div>'
+                : '';
+            const textoLado = b.textoLadoAtivo === true ? sanitizarHTML(b.textoLado) : '';
+            const temTexto = textoLado.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim().length > 0;
+            if (temTexto) {
+                return '<div class="blk blk--imagem blk--imagem-texto" style="text-align:' + alinhamento + '">' +
+                    '<div class="blk-img-texto">' +
+                    '<figure style="width:' + b.largura + '%"><img src="' + esc(src) + '" alt="' + esc(b.alt) + '" loading="lazy" style="width:100%">' +
+                    legenda + linkAmpliar + '</figure>' +
+                    '<div class="blk-img-texto-conteudo">' + textoLado + '</div>' +
+                    '</div>' + lightbox + '</div>';
+            }
+            if (pequena) {
+                return '<div class="blk blk--imagem blk--imagem-pequena" style="text-align:' + alinhamento + '">' +
+                    '<figure style="width:' + b.largura + '%"><img src="' + esc(src) + '" alt="' + esc(b.alt) + '" loading="lazy">' +
+                    legenda + linkAmpliar + '</figure></div>' + lightbox;
+            }
             return '<div class="blk blk--imagem" style="text-align:' + alinhamento + '">' +
                 '<figure style="width:' + b.largura + '%"><img src="' + esc(src) + '" alt="' + esc(b.alt) + '" loading="lazy">' +
-                (b.legenda ? '<figcaption>' + esc(b.legenda) + '</figcaption>' : '') + '</figure></div>';
+                legenda + '</figure></div>';
         }
         if (b.tipo === 'link') {
             const href = urlSegura(b.href) || '#';
@@ -2771,6 +2928,15 @@
             '.blk--imagem figure{margin:0 auto;display:inline-block;max-width:100%}' +
             '.blk--imagem img{border-radius:10px;margin:0 auto}' +
             '.blk--imagem figcaption{margin-top:8px;font-size:.9rem;opacity:.7}' +
+            '.blk--imagem .img-ampliar{display:inline-block;margin-top:6px;font-size:.9rem;font-weight:600;text-decoration:underline}' +
+            '.sec--hero .blk--imagem .img-ampliar{color:#fff}' +
+            '.blk-img-texto{display:flex;flex-wrap:wrap;align-items:flex-start;gap:22px}' +
+            '.blk-img-texto>figure{display:block;flex:0 0 auto;margin:0;max-width:100%}' +
+            '.blk-img-texto-conteudo{flex:1 1 260px;min-width:0;text-align:left}' +
+            '.img-lightbox{display:none;position:fixed;inset:0;z-index:9999;padding:28px;background:rgba(15,23,42,.9);align-items:center;justify-content:center}' +
+            '.img-lightbox:target{display:flex}' +
+            '.img-lightbox img{width:auto;max-width:94vw;max-height:86vh;border-radius:10px;box-shadow:0 24px 60px rgba(0,0,0,.5)}' +
+            '.img-lightbox-fechar{position:fixed;top:14px;right:22px;color:#fff;font-size:2rem;line-height:1;text-decoration:none;font-weight:400}' +
             '.blk--link .btn{display:inline-block;padding:12px 22px;border-radius:8px;background:var(--primary);color:#fff;font-weight:600}' +
             '.blk--link .btn--link{background:none;color:var(--primary);padding:0;text-decoration:underline}' +
             '.blk-divisor{border:0;border-top:1px solid rgba(15,23,42,.14);margin:28px 0}' +
@@ -2785,7 +2951,7 @@
             '.section-menu-list{display:flex;align-items:center;gap:4px 18px;max-width:var(--max);margin:0 auto;padding:10px 24px;list-style:none;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}' +
             '.section-menu-list a{display:inline-block;padding:6px 2px;font-size:.9rem;font-weight:600;color:var(--fg);border-bottom:2px solid transparent}' +
             '.section-menu-list a:hover{color:var(--primary);border-bottom-color:var(--primary)}' +
-            '@media(max-width:640px){.sec{padding:44px 0}.sec--hero{padding:64px 0}.page{padding:0 18px}.site-menu{padding:14px 18px;justify-content:flex-start}.site-nav-list{gap:2px 14px}.site-nav-list a{font-size:.9rem}.section-menu-list{padding:8px 18px;gap:2px 14px}}' +
+            '@media(max-width:640px){.sec{padding:44px 0}.sec--hero{padding:64px 0}.page{padding:0 18px}.site-menu{padding:14px 18px;justify-content:flex-start}.site-nav-list{gap:2px 14px}.site-nav-list a{font-size:.9rem}.section-menu-list{padding:8px 18px;gap:2px 14px}.blk-img-texto{display:block}.blk-img-texto-conteudo{margin-top:14px}}' +
             '@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}' +
             '@media print{body{background:#fff}.sec{break-inside:avoid}.section-menu{display:none}}';
     }
