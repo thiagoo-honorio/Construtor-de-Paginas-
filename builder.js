@@ -29,6 +29,7 @@
         texto: 'Texto',
         titulo: 'Título',
         imagem: 'Imagem',
+        video: 'Vídeo',
         link: 'Link / botão',
         lista: 'Lista',
         citacao: 'Citação',
@@ -162,6 +163,25 @@
         return urlSegura(v);
     }
 
+    // Aceita apenas links reconhecidos de YouTube/Vimeo e devolve o endereço do player.
+    function videoEmbed(valor) {
+        const v = String(valor == null ? '' : valor).trim();
+        if (!v || v.length > 2000) return null;
+        let m = v.match(/(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com\/watch\?(?:[^#]*&)?v=([A-Za-z0-9_-]{11})(?:[&#?]|$)/i);
+        if (!m) m = v.match(/(?:https?:\/\/)?(?:www\.)?youtu\.be\/([A-Za-z0-9_-]{11})(?:[/?#]|$)/i);
+        if (!m) m = v.match(/(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:embed|shorts)\/([A-Za-z0-9_-]{11})(?:[/?#]|$)/i);
+        if (m) return { src: 'https://www.youtube.com/embed/' + m[1], servico: 'YouTube' };
+        m = v.match(/(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/([0-9]+)(?:[/?#]|$)/i);
+        if (!m) m = v.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/([0-9]+)(?:[/?#]|$)/i);
+        if (m) return { src: 'https://player.vimeo.com/video/' + m[1], servico: 'Vimeo' };
+        return null;
+    }
+
+    function urlVideoSegura(valor) {
+        const v = String(valor == null ? '' : valor).trim();
+        return videoEmbed(v) ? v.slice(0, 2000) : '';
+    }
+
     function sanitizarHTML(valor) {
         const bruto = String(valor == null ? '' : valor);
         if (!bruto) return '';
@@ -235,6 +255,7 @@
                 textoLado: '', textoLadoAtivo: false,
                 imgLadoSrc: '', imgLadoAlt: '', imgLadoLegenda: '', imgLadoAtivo: false, imgLadoAmpliavel: false, imgLadoPequena: false, imgLadoLargura: 100
             },
+            video: { url: '', largura: 100, alinhamento: 'center' },
             link: { texto: 'Saiba mais', href: '', novaAba: true, estilo: 'botao', alinhamento: 'left', btnTamanho: 'medio', btnFundo: '', btnTexto: '' },
             lista: { html: '<ul><li>Primeiro item</li><li>Segundo item</li></ul>', alinhamento: 'left' },
             citacao: { html: '<p>Uma ideia que merece destaque.</p>', autor: '', alinhamento: 'left' },
@@ -505,6 +526,10 @@
             b.textoLadoAtivo = bruto.textoLadoAtivo === true;
             b.imgLadoAtivo = bruto.imgLadoAtivo === true && !b.textoLadoAtivo;
             if ((b.textoLadoAtivo || b.imgLadoAtivo) && b.largura > 70) b.largura = 70;
+            b.alinhamento = alinhamento;
+        } else if (tipo === 'video') {
+            b.url = urlVideoSegura(bruto.url);
+            b.largura = Math.min(100, Math.max(25, parseInt(bruto.largura, 10) || 100));
             b.alinhamento = alinhamento;
         } else if (tipo === 'link') {
             b.texto = texto(bruto.texto, 200) || 'Saiba mais';
@@ -954,6 +979,7 @@
           <button class="apb-btn" type="button" data-apb-add="texto">Texto</button>
           <button class="apb-btn" type="button" data-apb-add="titulo">Título</button>
           <button class="apb-btn" type="button" data-apb-add="imagem">Imagem</button>
+          <button class="apb-btn" type="button" data-apb-add="video">Vídeo</button>
           <button class="apb-btn" type="button" data-apb-add="link">Link</button>
           <button class="apb-btn" type="button" data-apb-add="lista">Lista</button>
           <button class="apb-btn" type="button" data-apb-add="citacao">Citação</button>
@@ -1287,6 +1313,15 @@
                 conteudo = '<div class="apb-img-placeholder"><span>Nenhuma imagem selecionada.</span>' +
                     '<button class="apb-btn apb-btn--sm" type="button" data-apb-img-escolher="1">Escolher imagem</button></div>';
             }
+        } else if (b.tipo === 'video') {
+            const info = videoEmbed(b.url);
+            const largura = Math.min(100, Math.max(25, parseInt(b.largura, 10) || 100));
+            conteudo = info
+                ? '<div class="apb-video" style="width:' + largura + '%"><div class="apb-video-frame">' +
+                    '<iframe src="' + esc(info.src) + '" title="Vídeo do ' + esc(info.servico) + '" loading="lazy" ' +
+                    'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>' +
+                    '</div></div>'
+                : '<div class="apb-video-vazio">Nenhum vídeo informado. Cole a URL de um vídeo do YouTube ou do Vimeo no painel.</div>';
         } else if (b.tipo === 'link') {
             const botao = b.estilo !== 'link';
             const classe = botao ? 'apb-link apb-link--botao apb-link--' + tamanhoBotaoLink(b.btnTamanho) : 'apb-link';
@@ -1608,6 +1643,13 @@
                     : '') +
                 campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: (b.textoLadoAtivo || b.imgLadoAtivo) ? 70 : 100, step: 5, sufixo: '%' }) +
                 campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
+        } else if (b.tipo === 'video') {
+            especifico = campo('URL do vídeo', 'blocoVideoUrl', b.url, {
+                placeholder: 'https://youtube.com/watch?v=... ou vimeo.com/123456',
+                hint: 'Cole um link do YouTube ou do Vimeo. O player é criado automaticamente na prévia e na exportação.'
+            }) +
+                campo('Largura', 'blocoVideoLargura', b.largura, { tipo: 'range', min: 25, max: 100, step: 5, sufixo: '%' }) +
+                campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
         } else if (b.tipo === 'link') {
             const corAtiva = !!(b.btnFundo || b.btnTexto);
             especifico = campo('Texto exibido no link', 'blocoTexto', b.texto, { placeholder: 'Ex.: Tutorial', hint: 'É o texto que o visitante vê e clica. O endereço fica só por trás dele.' }) +
@@ -1922,6 +1964,8 @@
             if (tipo === 'imagem') {
                 toast('Escolha uma imagem do computador ou informe um endereço no painel.');
                 escolherImagem(novo.id);
+            } else if (tipo === 'video') {
+                toast('Cole a URL de um vídeo do YouTube ou do Vimeo no painel.');
             }
             rolarParaSelecao();
         }
@@ -2408,6 +2452,15 @@
                 if (segura) b.src = segura;
                 return !!segura;
             }
+            case 'blocoVideoUrl': {
+                if (!v.trim()) { b.url = ''; return true; }
+                const segura = urlVideoSegura(v);
+                if (segura) b.url = segura;
+                return !!segura;
+            }
+            case 'blocoVideoLargura':
+                b.largura = Math.min(100, Math.max(25, parseInt(v, 10) || b.largura));
+                return true;
             case 'blocoHref': {
                 if (!v.trim()) { b.href = ''; return true; }
                 const segura = urlSegura(v);
@@ -3102,6 +3155,16 @@
                 '<figure style="width:' + b.largura + '%"><img src="' + esc(src) + '" alt="' + esc(b.alt) + '" loading="lazy">' +
                 legenda + '</figure></div>';
         }
+        if (b.tipo === 'video') {
+            const info = videoEmbed(b.url);
+            if (!info) return '';
+            const largura = Math.min(100, Math.max(25, parseInt(b.largura, 10) || 100));
+            return '<div class="blk blk--video" style="text-align:' + alinhamento + '">' +
+                '<div class="blk-video" style="width:' + largura + '%"><div class="blk-video-frame">' +
+                '<iframe src="' + esc(info.src) + '" title="Vídeo do ' + esc(info.servico) + '" loading="lazy" ' +
+                'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>' +
+                '</div></div></div>';
+        }
         if (b.tipo === 'link') {
             const href = urlSegura(b.href) || '#';
             const alvo = b.novaAba ? ' target="_blank" rel="noopener noreferrer"' : '';
@@ -3221,6 +3284,10 @@
             '.blk--link .btn--pequeno{padding:8px 14px;font-size:.9rem}' +
             '.blk--link .btn--medio{padding:12px 22px;font-size:1rem}' +
             '.blk--link .btn--grande{padding:16px 30px;font-size:1.15rem}' +
+            '.blk--video{width:100%}' +
+            '.blk-video{display:inline-block;max-width:100%}' +
+            '.blk-video-frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#0f172a}' +
+            '.blk-video-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}' +
             '.blk--link .btn--link{background:none;color:var(--primary);padding:0;text-decoration:underline}' +
             '.blk-divisor{border:0;border-top:1px solid rgba(15,23,42,.14);margin:28px 0}' +
             '.site-menu{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;max-width:var(--max);margin:0 auto;padding:18px 24px;border-bottom:1px solid rgba(15,23,42,.1)}' +
@@ -3330,7 +3397,7 @@
         return '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n' +
             '<meta charset="utf-8">\n' +
             '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
-            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: https: http:; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'; object-src \'none\'">\n' +
+            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: https: http:; style-src \'unsafe-inline\'; frame-src https://www.youtube.com https://player.vimeo.com; base-uri \'none\'; form-action \'none\'; object-src \'none\'">\n' +
             '<meta name="referrer" content="no-referrer">\n' +
             '<meta name="color-scheme" content="light">\n' +
             '<title>' + esc(titulo) + '</title>\n' +
