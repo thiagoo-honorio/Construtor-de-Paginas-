@@ -51,7 +51,9 @@
     let historico = [];
     let refazerPilha = [];
     let imagemAlvoId = null;
+    let imagemAlvoLado = false;
     let imagemUrlSemSrcNoFoco = false;
+    let imagemLadoUrlSemSrcNoFoco = false;
     let modalResolver = null;
     let refs = {};
     let sequencia = 0;
@@ -109,6 +111,17 @@
         const g = parseInt(h.slice(2, 4), 16);
         const b = parseInt(h.slice(4, 6), 16);
         return 'rgba(' + r + ',' + g + ',' + b + ',' + alfa + ')';
+    }
+
+    // Luminância percebida (sRGB). Usada para escolher texto claro/escuro sobre fundos personalizados.
+    function fundoEscuro(hex) {
+        const h = cor(hex, '#ffffff').slice(1);
+        const r = parseInt(h.slice(0, 2), 16) / 255;
+        const g = parseInt(h.slice(2, 4), 16) / 255;
+        const b = parseInt(h.slice(4, 6), 16) / 255;
+        const linear = function (c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+        const lum = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        return lum < 0.45;
     }
 
     function fonteValida(nome) {
@@ -205,7 +218,11 @@
         const extra = {
             texto: { html: '<p>Escreva seu texto aqui.</p>', alinhamento: 'left' },
             titulo: { texto: 'Novo título', nivel: 'h3', alinhamento: 'left' },
-            imagem: { src: '', alt: '', legenda: '', largura: 100, alinhamento: 'center', pequena: false, textoLado: '', textoLadoAtivo: false },
+            imagem: {
+                src: '', alt: '', legenda: '', largura: 100, alinhamento: 'center', pequena: false,
+                textoLado: '', textoLadoAtivo: false,
+                imgLadoSrc: '', imgLadoAlt: '', imgLadoLegenda: '', imgLadoAtivo: false, imgLadoAmpliavel: false, imgLadoPequena: false, imgLadoLargura: 100
+            },
             link: { texto: 'Saiba mais', href: '', novaAba: true, estilo: 'botao', alinhamento: 'left' },
             lista: { html: '<ul><li>Primeiro item</li><li>Segundo item</li></ul>', alinhamento: 'left' },
             citacao: { html: '<p>Uma ideia que merece destaque.</p>', autor: '', alinhamento: 'left' },
@@ -217,7 +234,7 @@
 
     function criarSecao(preset) {
         const tipo = PRESETS[preset] ? preset : 'conteudo';
-        const secao = { id: uid('sec'), titulo: 'Nova seção', subtitulo: '', preset: tipo, ancora: '', blocos: [] };
+        const secao = { id: uid('sec'), titulo: 'Nova seção', subtitulo: '', preset: tipo, ancora: '', blocos: [], fundo: '' };
         if (tipo === 'hero') {
             secao.titulo = 'Um título que resume a página';
             secao.subtitulo = 'Explique em uma frase o que o visitante vai encontrar aqui.';
@@ -466,8 +483,16 @@
             b.largura = Math.min(100, Math.max(15, parseInt(bruto.largura, 10) || 100));
             b.pequena = bruto.pequena === true;
             b.textoLado = sanitizarHTML(bruto.textoLado);
+            b.imgLadoSrc = urlImagemSegura(bruto.imgLadoSrc);
+            b.imgLadoAlt = texto(bruto.imgLadoAlt, 300);
+            b.imgLadoLegenda = texto(bruto.imgLadoLegenda, 300);
+            b.imgLadoAmpliavel = bruto.imgLadoAmpliavel === true;
+            b.imgLadoPequena = bruto.imgLadoPequena === true;
+            b.imgLadoLargura = Math.min(100, Math.max(15, parseInt(bruto.imgLadoLargura, 10) || 100));
+            if (b.imgLadoPequena && b.imgLadoLargura >= 100) b.imgLadoLargura = 40;
             b.textoLadoAtivo = bruto.textoLadoAtivo === true;
-            if (b.textoLadoAtivo && b.largura > 70) b.largura = 70;
+            b.imgLadoAtivo = bruto.imgLadoAtivo === true && !b.textoLadoAtivo;
+            if ((b.textoLadoAtivo || b.imgLadoAtivo) && b.largura > 70) b.largura = 70;
             b.alinhamento = alinhamento;
         } else if (tipo === 'link') {
             b.texto = texto(bruto.texto, 200) || 'Saiba mais';
@@ -490,6 +515,7 @@
         secao.preset = PRESETS[bruto.preset] ? bruto.preset : 'conteudo';
         secao.ancora = slugify(bruto.ancora || '');
         if (secao.ancora === 'pagina') secao.ancora = '';
+        secao.fundo = cor(bruto.fundo, '');
         secao.blocos = [];
         const usadosBlocos = new Set();
         if (Array.isArray(bruto.blocos)) {
@@ -1171,6 +1197,10 @@
         const el = document.createElement('section');
         el.className = 'apb-sec apb-sec--' + sec.preset;
         el.dataset.apbSec = sec.id;
+        if (sec.fundo) {
+            el.style.backgroundColor = sec.fundo;
+            el.classList.add(fundoEscuro(sec.fundo) ? 'apb-sec-fundo-escuro' : 'apb-sec-fundo-claro');
+        }
         if (selecao.tipo === 'secao' && selecao.id === sec.id) el.classList.add('apb-selecionada');
         el.innerHTML = ferramentasSecao() +
             '<div class="apb-sec-head">' +
@@ -1207,7 +1237,9 @@
         } else if (b.tipo === 'imagem') {
             if (b.src) {
                 const pequena = b.pequena === true;
-                const lado = b.textoLadoAtivo === true;
+                const ladoTexto = b.textoLadoAtivo === true;
+                const ladoImagem = b.imgLadoAtivo === true;
+                const lado = ladoTexto || ladoImagem;
                 const figuraAberta = (pequena || lado)
                     ? '<figure' + (pequena ? ' class="apb-figura-pequena"' : '') + ' style="width:' + b.largura + '%">'
                     : '<figure>';
@@ -1216,10 +1248,25 @@
                     '<figcaption data-apb-field="legenda" data-single-line="1" data-placeholder="Legenda (opcional)">' + esc(b.legenda) + '</figcaption>' +
                     (pequena ? '<a class="apb-img-ampliar" href="#" data-apb-ampliar="' + esc(b.id) + '">Clique para ampliar a imagem</a>' : '') +
                     '</figure>';
+                let colunaLado = '';
+                if (ladoTexto) {
+                    colunaLado = '<div class="apb-rich apb-img-texto-conteudo" data-apb-field="textoLado" data-placeholder="Escreva o texto ao lado da imagem...">' + sanitizarHTML(b.textoLado) + '</div>';
+                } else if (ladoImagem) {
+                    if (b.imgLadoSrc) {
+                        const pequenaLado = b.imgLadoPequena === true;
+                        const estreita = b.imgLadoLargura < 100;
+                        colunaLado = '<figure class="apb-img-lado-figura' + (estreita ? ' apb-img-lado-pequena' : '') + '" style="width:' + b.imgLadoLargura + '%">' +
+                            '<img src="' + esc(b.imgLadoSrc) + '" alt="' + esc(b.imgLadoAlt) + '" loading="lazy" style="width:100%">' +
+                            '<figcaption data-apb-field="imgLadoLegenda" data-single-line="1" data-placeholder="Legenda (opcional)">' + esc(b.imgLadoLegenda) + '</figcaption>' +
+                            ((pequenaLado || b.imgLadoAmpliavel) ? '<a class="apb-img-ampliar" href="#" data-apb-lado-ampliar="' + esc(b.id) + '">Clique para ampliar a imagem</a>' : '') +
+                            '</figure>';
+                    } else {
+                        colunaLado = '<div class="apb-img-lado-vazio"><span>Sem segunda imagem.</span>' +
+                            '<button class="apb-btn apb-btn--sm" type="button" data-apb-img-lado-escolher="1">Escolher imagem</button></div>';
+                    }
+                }
                 conteudo = lado
-                    ? '<div class="apb-img-texto">' + figura +
-                        '<div class="apb-rich apb-img-texto-conteudo" data-apb-field="textoLado" data-placeholder="Escreva o texto ao lado da imagem...">' + sanitizarHTML(b.textoLado) + '</div>' +
-                        '</div>'
+                    ? '<div class="apb-img-texto">' + figura + '<div class="apb-img-lado">' + colunaLado + '</div></div>'
                     : figura;
             } else {
                 conteudo = '<div class="apb-img-placeholder"><span>Nenhuma imagem selecionada.</span>' +
@@ -1484,6 +1531,11 @@
             campo('Título', 'secaoTitulo', sec.titulo, { placeholder: 'Título da seção' }) +
             campo('Subtítulo', 'secaoSubtitulo', sec.subtitulo, { placeholder: 'Subtítulo (opcional)' }) +
             campo('Estilo da seção', 'secaoPreset', sec.preset, { tipo: 'select', opcoes: presets, hint: PRESETS[sec.preset] ? PRESETS[sec.preset].dica : '' }) +
+            campo('Fundo personalizado', 'secaoFundoAtivo', !!sec.fundo, { tipo: 'checkbox' }) +
+            (sec.fundo
+                ? campo('Cor de fundo', 'secaoFundo', sec.fundo, { tipo: 'color', hint: 'O texto da seção ajusta sozinho para ficar legível sobre essa cor.' }) +
+                    '<p class="apb-hint">Escolha uma cor clara ou escura: títulos, texto, links e citações mudam de cor automaticamente para manter o contraste.</p>'
+                : '<p class="apb-hint">Sem cor personalizada, a seção usa o fundo do estilo escolhido acima.</p>') +
             campo('Âncora (link direto)', 'secaoAncora', sec.ancora, { placeholder: 'ex.: contato', hint: 'Permite criar links para #' + esc(sec.ancora || 'ancora') + ' nesta página.' }) +
             '<div class="apb-divider"></div>' +
             '<div class="apb-insp-head">Blocos (' + sec.blocos.length + ')</div>' +
@@ -1524,7 +1576,19 @@
                 '<p class="apb-hint">Quando marcada, a imagem fica reduzida e mostra “Clique para ampliar a imagem” embaixo dela.</p>' +
                 campo('Texto ao lado da imagem', 'blocoTextoLadoAtivo', b.textoLadoAtivo === true, { tipo: 'checkbox' }) +
                 (b.textoLadoAtivo ? '<p class="apb-hint">Escreva o texto no espaço ao lado da imagem, aqui no canvas. No celular ele desce para baixo da imagem.</p>' : '') +
-                campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: b.textoLadoAtivo ? 70 : 100, step: 5, sufixo: '%' }) +
+                campo('Imagem ao lado', 'blocoImgLadoAtivo', b.imgLadoAtivo === true, { tipo: 'checkbox' }) +
+                (b.imgLadoAtivo
+                    ? '<p class="apb-hint">A segunda imagem fica à direita da primeira; no celular ela desce para baixo. Ela substitui o texto ao lado — as duas opções não ficam ativas ao mesmo tempo.</p>' +
+                        campo('Endereço da imagem ao lado', 'blocoImgLadoUrl', b.imgLadoSrc, { placeholder: 'https://... ou envie um arquivo' }) +
+                        '<button class="apb-btn apb-btn--sm" type="button" data-apb-block-action="upload-lado">Enviar segunda imagem do computador</button>' +
+                        campo('Texto alternativo da segunda imagem', 'blocoImgLadoAlt', b.imgLadoAlt, { placeholder: 'Descreva a segunda imagem' }) +
+                        campo('Legenda da segunda imagem', 'blocoImgLadoLegenda', b.imgLadoLegenda, { placeholder: 'Legenda (opcional)' }) +
+                        campo('Segunda imagem pequena', 'blocoImgLadoPequena', b.imgLadoPequena === true, { tipo: 'checkbox' }) +
+                        '<p class="apb-hint">Pequena = 40% da coluna, já com link para ampliar. A pergunta aparece ao inserir a imagem; esta caixa permite mudar depois. Use “Largura da segunda imagem” para ajustar o tamanho livremente (15% a 100%).</p>' +
+                        campo('Largura da segunda imagem', 'blocoImgLadoLargura', b.imgLadoLargura, { tipo: 'range', min: 15, max: 100, step: 5, sufixo: '%' }) +
+                        campo('Permitir ampliar a segunda imagem', 'blocoImgLadoAmpliavel', b.imgLadoAmpliavel === true, { tipo: 'checkbox' })
+                    : '') +
+                campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: (b.textoLadoAtivo || b.imgLadoAtivo) ? 70 : 100, step: 5, sufixo: '%' }) +
                 campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
         } else if (b.tipo === 'link') {
             especifico = campo('Texto exibido no link', 'blocoTexto', b.texto, { placeholder: 'Ex.: Tutorial', hint: 'É o texto que o visitante vê e clica. O endereço fica só por trás dele.' }) +
@@ -1871,8 +1935,9 @@
         });
     }
 
-    function escolherImagem(id) {
+    function escolherImagem(id, lado) {
         imagemAlvoId = id || (selecao.tipo === 'bloco' ? selecao.id : null);
+        imagemAlvoLado = !!lado;
         if (!imagemAlvoId) {
             toast('Selecione um bloco de imagem primeiro.', 'aviso');
             return;
@@ -1895,6 +1960,7 @@
             else if (campo === 'texto') b.texto = texto(valor, 600);
             else if (campo === 'legenda') b.legenda = texto(valor, 300);
             else if (campo === 'textoLado') b.textoLado = sanitizarHTML(valor);
+            else if (campo === 'imgLadoLegenda') b.imgLadoLegenda = texto(valor, 300);
             else if (campo === 'autor') b.autor = texto(valor, 160);
             else return;
         } else {
@@ -1976,15 +2042,21 @@
         });
     }
 
-    function aplicarImagem(id, src, nomeArquivo) {
+    function aplicarImagem(id, src, nomeArquivo, lado) {
         const b = acharBloco(id);
         if (!b) return;
         registrar(function () {
-            b.src = src;
-            if (!b.alt) b.alt = texto(String(nomeArquivo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' '), 200);
+            if (lado) {
+                b.imgLadoSrc = src;
+                if (!b.imgLadoAlt) b.imgLadoAlt = texto(String(nomeArquivo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' '), 200);
+            } else {
+                b.src = src;
+                if (!b.alt) b.alt = texto(String(nomeArquivo || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' '), 200);
+            }
             selecao = { tipo: 'bloco', id: id };
         });
-        perguntarImagemPequena(id);
+        if (lado) perguntarImagemPequenaLado(id);
+        else perguntarImagemPequena(id);
     }
 
     function perguntarImagemPequena(id) {
@@ -2005,8 +2077,12 @@
         });
     }
 
+    function temLado(b) {
+        return b.textoLadoAtivo === true || b.imgLadoAtivo === true;
+    }
+
     function aplicarModoPequena(b, valor) {
-        const padrao = b.textoLadoAtivo ? 50 : 100;
+        const padrao = temLado(b) ? 50 : 100;
         const eraPequena = b.pequena === true;
         b.pequena = !!valor;
         if (b.pequena) {
@@ -2016,15 +2092,31 @@
         }
     }
 
-    function aplicarTextoLado(b, valor) {
-        const era = b.textoLadoAtivo === true;
-        b.textoLadoAtivo = !!valor;
-        if (b.textoLadoAtivo) {
-            if (b.largura > 70) b.largura = b.pequena ? 40 : 50;
-        } else if (era && !b.pequena && b.largura === 50) {
-            b.largura = 100;
+    function aplicarModoPequenaLado(b, valor) {
+        const eraPequena = b.imgLadoPequena === true;
+        b.imgLadoPequena = !!valor;
+        if (b.imgLadoPequena) {
+            if (b.imgLadoLargura >= 100) b.imgLadoLargura = 40;
+        } else if (eraPequena && b.imgLadoLargura === 40) {
+            b.imgLadoLargura = 100;
         }
     }
+
+    function aplicarLado(b, tipo, valor) {
+        const era = temLado(b);
+        if (valor) {
+            b.textoLadoAtivo = tipo === 'texto';
+            b.imgLadoAtivo = tipo === 'imagem';
+            if (b.largura > 70) b.largura = b.pequena ? 40 : 50;
+        } else if (era) {
+            b.textoLadoAtivo = false;
+            b.imgLadoAtivo = false;
+            if (!b.pequena && b.largura === 50) b.largura = 100;
+        }
+    }
+
+    function aplicarTextoLado(b, valor) { aplicarLado(b, 'texto', valor); }
+    function aplicarImagemLado(b, valor) { aplicarLado(b, 'imagem', valor); }
 
     function definirImagemPequena(id, valor) {
         const b = acharBloco(id);
@@ -2034,6 +2126,34 @@
             selecao = { tipo: 'bloco', id: id };
         });
         if (b.pequena) toast('Imagem pequena: use “Largura” no painel para ajustar o tamanho.', 'ok', 5000);
+    }
+
+    function perguntarImagemPequenaLado(id) {
+        const b = acharBloco(id);
+        if (!b || !b.imgLadoSrc) return;
+        abrirModal({
+            titulo: 'A imagem ao lado é pequena?',
+            texto: 'Escolha “Sim” para exibir a segunda imagem reduzida (40% da coluna da direita), com “Clique para ampliar a imagem” embaixo dela. Depois é só ajustar a largura no painel de propriedades.',
+            ok: 'Sim, imagem pequena',
+            cancelar: 'Não, tamanho normal'
+        }).then(function (res) {
+            if (res) {
+                definirImagemPequenaLado(id, true);
+                return;
+            }
+            const atual = acharBloco(id);
+            if (atual && atual.imgLadoPequena) definirImagemPequenaLado(id, false);
+        });
+    }
+
+    function definirImagemPequenaLado(id, valor) {
+        const b = acharBloco(id);
+        if (!b) return;
+        registrar(function () {
+            aplicarModoPequenaLado(b, valor);
+            selecao = { tipo: 'bloco', id: id };
+        });
+        if (b.imgLadoPequena) toast('Segunda imagem pequena: use “Largura da segunda imagem” no painel para ajustar.', 'ok', 5000);
     }
 
     function sincronizarCampoAtivo() {
@@ -2172,6 +2292,16 @@
                 }
                 case 'secaoSubtitulo': s.subtitulo = texto(v, 400); return true;
                 case 'secaoPreset': s.preset = PRESETS[v] ? v : s.preset; return true;
+                case 'secaoFundoAtivo':
+                    if (valor) {
+                        if (!s.fundo) s.fundo = '#ffffff';
+                    } else {
+                        s.fundo = '';
+                    }
+                    return true;
+                case 'secaoFundo':
+                    if (s.fundo) s.fundo = cor(v, s.fundo);
+                    return true;
                 case 'secaoAncora': {
                     const base = slugify(v);
                     s.ancora = base === 'pagina' ? '' : ancoraUnica(pg, base, s.id);
@@ -2192,7 +2322,7 @@
             case 'blocoNovaAba': b.novaAba = !!valor; return true;
             case 'blocoAltura': b.altura = Math.min(200, Math.max(8, parseInt(v, 10) || b.altura)); return true;
             case 'blocoImagemLargura': {
-                const maxLargura = b.textoLadoAtivo ? 70 : 100;
+                const maxLargura = temLado(b) ? 70 : 100;
                 b.largura = Math.min(maxLargura, Math.max(15, parseInt(v, 10) || b.largura));
                 return true;
             }
@@ -2202,6 +2332,24 @@
             case 'blocoTextoLadoAtivo':
                 aplicarTextoLado(b, valor);
                 return true;
+            case 'blocoImgLadoAtivo':
+                aplicarImagemLado(b, valor);
+                return true;
+            case 'blocoImgLadoUrl': {
+                if (!v.trim()) { b.imgLadoSrc = ''; return true; }
+                const segura = urlImagemSegura(v);
+                if (segura) b.imgLadoSrc = segura;
+                return !!segura;
+            }
+            case 'blocoImgLadoAlt': b.imgLadoAlt = texto(v, 300); return true;
+            case 'blocoImgLadoLegenda': b.imgLadoLegenda = texto(v, 300); return true;
+            case 'blocoImgLadoPequena':
+                aplicarModoPequenaLado(b, valor);
+                return true;
+            case 'blocoImgLadoLargura':
+                b.imgLadoLargura = Math.min(100, Math.max(15, parseInt(v, 10) || b.imgLadoLargura));
+                return true;
+            case 'blocoImgLadoAmpliavel': b.imgLadoAmpliavel = !!valor; return true;
             case 'blocoImagemUrl': {
                 if (!v.trim()) { b.src = ''; return true; }
                 const segura = urlImagemSegura(v);
@@ -2249,7 +2397,7 @@
         }
         if (aplicou) {
             if (prop.indexOf('secao') === 0) renderSectionsList();
-            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo') renderInspector();
+            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo' || prop === 'blocoImgLadoAtivo' || prop === 'secaoFundoAtivo') renderInspector();
             marcarSujo();
             agendarCanvas();
         }
@@ -2345,6 +2493,7 @@
         else if (acao === 'dup') acaoDuplicarBloco(b.id);
         else if (acao === 'del') acaoExcluirBloco(b.id);
         else if (acao === 'upload') escolherImagem(b.id);
+        else if (acao === 'upload-lado') escolherImagem(b.id, true);
     }
 
     function esconderMenuExport() {
@@ -2449,9 +2598,11 @@
         refs.sectionsList.addEventListener('click', aoClicarListaSecoes);
 
         refs.inspector.addEventListener('focusin', function (e) {
-            const el = e.target.closest ? e.target.closest('[data-apb-prop="blocoImagemUrl"]') : null;
+            const alvo = e.target.closest ? e.target.closest('[data-apb-prop]') : null;
+            const prop = alvo ? alvo.dataset.apbProp : '';
             const b = blocoAtual();
-            imagemUrlSemSrcNoFoco = !!(el && b && !b.src);
+            imagemUrlSemSrcNoFoco = !!(prop === 'blocoImagemUrl' && b && !b.src);
+            imagemLadoUrlSemSrcNoFoco = !!(prop === 'blocoImgLadoUrl' && b && !b.imgLadoSrc);
         });
         refs.inspector.addEventListener('input', function (e) {
             const el = e.target.closest ? e.target.closest('[data-apb-prop]') : null;
@@ -2515,6 +2666,15 @@
                 imagemUrlSemSrcNoFoco = false;
                 renderCanvas();
                 if (devePerguntar) perguntarImagemPequena(b.id);
+            } else if (prop === 'blocoImgLadoUrl') {
+                if (b) {
+                    if (el.value.trim() && !b.imgLadoSrc) toast('Endereço de imagem inválido ou muito grande.', 'erro');
+                    el.value = b.imgLadoSrc || '';
+                }
+                const devePerguntar = imagemLadoUrlSemSrcNoFoco && b && b.imgLadoSrc;
+                imagemLadoUrlSemSrcNoFoco = false;
+                renderCanvas();
+                if (devePerguntar) perguntarImagemPequenaLado(b.id);
             } else if (prop === 'blocoHref') {
                 if (b) {
                     if (el.value.trim() && !b.href) toast('Endereço inválido. Use http://, https://, mailto:, tel: ou #âncora.', 'erro');
@@ -2591,7 +2751,7 @@
             if (!file || !alvo) return;
             toast('Preparando imagem...', 'ok', 1500);
             processarImagem(file).then(function (src) {
-                aplicarImagem(alvo, src, file.name);
+                aplicarImagem(alvo, src, file.name, imagemAlvoLado);
             }).catch(function (motivo) {
                 const mensagens = {
                     formato: 'Formato não suportado. Use PNG, JPG, WEBP ou GIF.',
@@ -2628,6 +2788,15 @@
             const blocoEl = ampliar.closest('[data-apb-block]');
             const b = blocoEl ? acharBloco(blocoEl.dataset.apbBlock) : null;
             if (b && b.src) abrirLightbox(b.src, b.alt);
+            return;
+        }
+        const ampliarLado = t.closest ? t.closest('[data-apb-lado-ampliar]') : null;
+        if (ampliarLado) {
+            e.preventDefault();
+            e.stopPropagation();
+            const blocoEl = ampliarLado.closest('[data-apb-block]');
+            const b = blocoEl ? acharBloco(blocoEl.dataset.apbBlock) : null;
+            if (b && b.imgLadoSrc) abrirLightbox(b.imgLadoSrc, b.imgLadoAlt);
             return;
         }
         const menuLink = t.closest ? t.closest('[data-apb-menu-pagina]') : null;
@@ -2688,6 +2857,13 @@
             e.preventDefault();
             e.stopPropagation();
             escolherImagem(blkWrap.dataset.apbBlock);
+            return;
+        }
+        const imgLadoBtn = t.closest ? t.closest('[data-apb-img-lado-escolher]') : null;
+        if (imgLadoBtn && blkWrap) {
+            e.preventDefault();
+            e.stopPropagation();
+            escolherImagem(blkWrap.dataset.apbBlock, true);
             return;
         }
         const link = t.closest ? t.closest('a') : null;
@@ -2840,13 +3016,30 @@
                 : '';
             const textoLado = b.textoLadoAtivo === true ? sanitizarHTML(b.textoLado) : '';
             const temTexto = textoLado.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim().length > 0;
-            if (temTexto) {
+            const srcLado = b.imgLadoAtivo === true ? urlImagemSegura(b.imgLadoSrc) : '';
+            if (temTexto || srcLado) {
+                let colunaLado = '<div class="blk-img-texto-conteudo">' + textoLado + '</div>';
+                let lightboxLado = '';
+                if (srcLado) {
+                    const alvoLado = 'ampliar-lado-' + String(b.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+                    const pequenaLado = b.imgLadoPequena === true;
+                    const ampliavel = pequenaLado || b.imgLadoAmpliavel === true;
+                    const linkLado = ampliavel ? '<a class="img-ampliar" href="#' + alvoLado + '">Clique para ampliar a imagem</a>' : '';
+                    const estreita = b.imgLadoLargura < 100;
+                    colunaLado = '<div class="blk-img-lado' + (estreita ? ' blk-img-lado-pequena' : '') + '">' +
+                        '<figure style="width:' + b.imgLadoLargura + '%"><img src="' + esc(srcLado) + '" alt="' + esc(b.imgLadoAlt) + '" loading="lazy" style="width:100%">' +
+                        (b.imgLadoLegenda ? '<figcaption>' + esc(b.imgLadoLegenda) + '</figcaption>' : '') + linkLado + '</figure></div>';
+                    if (ampliavel) {
+                        lightboxLado = '<div class="img-lightbox" id="' + alvoLado + '" role="dialog" aria-label="Imagem ampliada">' +
+                            '<a class="img-lightbox-fechar" href="#" aria-label="Fechar imagem ampliada">×</a>' +
+                            '<img src="' + esc(srcLado) + '" alt="' + esc(b.imgLadoAlt) + '"></div>';
+                    }
+                }
                 return '<div class="blk blk--imagem blk--imagem-texto" style="text-align:' + alinhamento + '">' +
                     '<div class="blk-img-texto">' +
                     '<figure style="width:' + b.largura + '%"><img src="' + esc(src) + '" alt="' + esc(b.alt) + '" loading="lazy" style="width:100%">' +
                     legenda + linkAmpliar + '</figure>' +
-                    '<div class="blk-img-texto-conteudo">' + textoLado + '</div>' +
-                    '</div>' + lightbox + '</div>';
+                    colunaLado + '</div>' + lightbox + lightboxLado + '</div>';
             }
             if (pequena) {
                 return '<div class="blk blk--imagem blk--imagem-pequena" style="text-align:' + alinhamento + '">' +
@@ -2877,7 +3070,13 @@
 
     function secaoExportHTML(sec) {
         const ancora = sec.ancora || sec.id;
-        let html = '<section class="sec sec--' + esc(sec.preset) + '" id="' + esc(ancora) + '">';
+        let classes = 'sec sec--' + esc(sec.preset);
+        let estilo = '';
+        if (sec.fundo) {
+            classes += fundoEscuro(sec.fundo) ? ' sec--fundo-escuro' : ' sec--fundo-claro';
+            estilo = ' style="background:' + esc(sec.fundo) + '"';
+        }
+        let html = '<section class="' + classes + '" id="' + esc(ancora) + '"' + estilo + '>';
         if (sec.titulo || sec.subtitulo) {
             html += '<header class="sec-head">';
             if (sec.titulo) html += '<h2 class="sec-title">' + esc(sec.titulo) + '</h2>';
@@ -2885,7 +3084,15 @@
             html += '</header>';
         }
         const blocos = sec.blocos.map(blocoExportHTML).filter(Boolean).join('');
-        html += blocos || '<p class="blk blk--texto">Esta seção ainda não tem conteúdo.</p>';
+        const conteudo = blocos || '<p class="blk blk--texto">Esta seção ainda não tem conteúdo.</p>';
+        html += '<details class="sec-dobra" open>' +
+            '<summary class="sec-dobra-btn" title="Ocultar ou mostrar o conteúdo desta seção" aria-label="Ocultar ou mostrar o conteúdo desta seção">' +
+            '<span class="sec-dobra-rotulo sec-dobra-rotulo--ocultar">Ocultar</span>' +
+            '<span class="sec-dobra-rotulo sec-dobra-rotulo--mostrar">Mostrar</span>' +
+            '<span class="sec-dobra-seta" aria-hidden="true"></span>' +
+            '</summary>' +
+            '<div class="sec-dobra-conteudo">' + conteudo + '</div>' +
+            '</details>';
         html += '</section>';
         return html;
     }
@@ -2899,9 +3106,22 @@
             'img{max-width:100%;height:auto;display:block}' +
             'a{color:var(--primary);text-decoration:none}' +
             '.page{max-width:var(--max);margin:0 auto;padding:0 24px}' +
-            '.sec{padding:64px 0;border-top:1px solid rgba(15,23,42,.08);scroll-margin-top:64px}' +
+            '.sec{position:relative;padding:64px 0;border-top:1px solid rgba(15,23,42,.08);scroll-margin-top:64px}' +
             '.sec:first-child{border-top:0}' +
-            '.sec-head{margin:0 0 28px}' +
+            '.sec-head{margin:0 0 28px;padding-right:130px}' +
+            '.sec-dobra-btn{position:absolute;top:58px;right:24px;z-index:5;display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid rgba(15,23,42,.16);border-radius:8px;background:rgba(255,255,255,.9);color:inherit;font:inherit;font-size:.85rem;font-weight:600;line-height:1;cursor:pointer;list-style:none;user-select:none;box-shadow:0 2px 8px rgba(15,23,42,.06)}' +
+            '.sec-dobra-btn::-webkit-details-marker{display:none}' +
+            '.sec-dobra-btn::marker{content:""}' +
+            '.sec-dobra-btn:hover{border-color:var(--primary);color:var(--primary)}' +
+            '.sec-dobra-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}' +
+            '.sec-dobra-seta{display:inline-block;width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s}' +
+            '.sec-dobra:not([open]) .sec-dobra-seta{transform:rotate(-45deg) translateY(-2px)}' +
+            '.sec-dobra-rotulo--mostrar{display:none}' +
+            '.sec-dobra:not([open]) .sec-dobra-rotulo--ocultar{display:none}' +
+            '.sec-dobra:not([open]) .sec-dobra-rotulo--mostrar{display:inline}' +
+            '.sec--fundo-escuro .sec-dobra-btn{background:rgba(30,41,59,.9);border-color:rgba(255,255,255,.28)}' +
+            '.sec--hero .sec-dobra-btn{top:90px;background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.45);color:#fff;box-shadow:none}' +
+            '.sec--hero .sec-dobra-btn:hover{border-color:#fff}' +
             '.sec-title{font-size:clamp(1.6rem,3vw,2.1rem);line-height:1.2;margin:0 0 8px;letter-spacing:-.01em}' +
             '.sec-sub{margin:0;font-size:1.05rem;opacity:.75}' +
             '.sec--destaque{background:var(--soft)}' +
@@ -2933,6 +3153,11 @@
             '.blk-img-texto{display:flex;flex-wrap:wrap;align-items:flex-start;gap:22px}' +
             '.blk-img-texto>figure{display:block;flex:0 0 auto;margin:0;max-width:100%}' +
             '.blk-img-texto-conteudo{flex:1 1 260px;min-width:0;text-align:left}' +
+            '.blk-img-lado{flex:1 1 260px;min-width:0}' +
+            '.blk-img-lado figure{display:block;margin:0;max-width:100%}' +
+            '.blk-img-lado img{display:block;max-width:100%;border-radius:10px}' +
+            '.blk-img-lado figcaption{margin-top:8px;font-size:.9rem;opacity:.7}' +
+            '.blk-img-lado-pequena figure{margin:0 auto}' +
             '.img-lightbox{display:none;position:fixed;inset:0;z-index:9999;padding:28px;background:rgba(15,23,42,.9);align-items:center;justify-content:center}' +
             '.img-lightbox:target{display:flex}' +
             '.img-lightbox img{width:auto;max-width:94vw;max-height:86vh;border-radius:10px;box-shadow:0 24px 60px rgba(0,0,0,.5)}' +
@@ -2951,9 +3176,33 @@
             '.section-menu-list{display:flex;align-items:center;gap:4px 18px;max-width:var(--max);margin:0 auto;padding:10px 24px;list-style:none;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}' +
             '.section-menu-list a{display:inline-block;padding:6px 2px;font-size:.9rem;font-weight:600;color:var(--fg);border-bottom:2px solid transparent}' +
             '.section-menu-list a:hover{color:var(--primary);border-bottom-color:var(--primary)}' +
-            '@media(max-width:640px){.sec{padding:44px 0}.sec--hero{padding:64px 0}.page{padding:0 18px}.site-menu{padding:14px 18px;justify-content:flex-start}.site-nav-list{gap:2px 14px}.site-nav-list a{font-size:.9rem}.section-menu-list{padding:8px 18px;gap:2px 14px}.blk-img-texto{display:block}.blk-img-texto-conteudo{margin-top:14px}}' +
+            '@media(max-width:640px){.sec{padding:44px 0}.sec--hero{padding:64px 0}.page{padding:0 18px}.site-menu{padding:14px 18px;justify-content:flex-start}.site-nav-list{gap:2px 14px}.site-nav-list a{font-size:.9rem}.section-menu-list{padding:8px 18px;gap:2px 14px}.blk-img-texto{display:block}.blk-img-texto-conteudo{margin-top:14px}.blk-img-lado{margin-top:14px}}' +
+            /* Fundo personalizado: o texto se ajusta ao contraste da cor escolhida. */
+            '.sec--fundo-escuro{color:#f8fafc}' +
+            '.sec--fundo-escuro .sec-title,.sec--fundo-escuro .blk--titulo h2,.sec--fundo-escuro .blk--titulo h3,.sec--fundo-escuro .blk--titulo h4{color:#fff}' +
+            '.sec--fundo-escuro .sec-sub,.sec--fundo-escuro .blk--imagem figcaption{color:rgba(248,250,252,.82)}' +
+            '.sec--fundo-escuro .blk--texto,.sec--fundo-escuro .blk--lista,.sec--fundo-escuro .blk--citacao,.sec--fundo-escuro .blk--imagem-texto .blk-img-texto-conteudo{color:#f8fafc}' +
+            '.sec--fundo-escuro a,.sec--fundo-escuro .blk-rich a{color:#93c5fd}' +
+            '.sec--fundo-escuro .blk--citacao{background:rgba(255,255,255,.12);border-left-color:rgba(255,255,255,.7)}' +
+            '.sec--fundo-escuro .blk--link .btn{background:#fff;color:#0f172a}' +
+            '.sec--fundo-escuro .blk--link .btn--link{background:none;color:#fff}' +
+            '.sec--fundo-escuro .blk-divisor{border-top-color:rgba(255,255,255,.28)}' +
+            '.sec--fundo-escuro .blk--imagem .img-ampliar,.sec--fundo-escuro .blk-img-lado .img-ampliar{color:#fff}' +
+            '.sec--fundo-claro{color:#1e293b}' +
+            '.sec--fundo-claro .sec-title,.sec--fundo-claro .blk--titulo h2,.sec--fundo-claro .blk--titulo h3,.sec--fundo-claro .blk--titulo h4{color:#0f172a}' +
+            '.sec--fundo-claro .sec-sub,.sec--fundo-claro .blk--imagem figcaption{color:rgba(15,23,42,.75)}' +
+            '.sec--fundo-claro .blk--texto,.sec--fundo-claro .blk--lista,.sec--fundo-claro .blk--citacao,.sec--fundo-claro .blk--imagem-texto .blk-img-texto-conteudo{color:#1e293b}' +
+            '.sec--fundo-claro .blk--citacao{background:rgba(15,23,42,.06);border-left-color:var(--primary)}' +
+            '.sec--fundo-claro .blk--link .btn--link{color:var(--primary)}' +
+            '.sec--fundo-escuro .sec-dobra-btn{background:rgba(30,41,59,.92);border-color:rgba(255,255,255,.3);color:#f8fafc;box-shadow:none}' +
+            '.sec--fundo-escuro .sec-dobra-btn:hover{color:#fff;border-color:#fff}' +
+            '.sec--fundo-claro .sec-dobra-btn{background:rgba(255,255,255,.94);border-color:rgba(15,23,42,.18);color:#0f172a;box-shadow:0 2px 8px rgba(15,23,42,.08)}' +
+            '.sec--fundo-claro .sec-dobra-btn:hover{color:var(--primary)}' +
             '@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}' +
-            '@media print{body{background:#fff}.sec{break-inside:avoid}.section-menu{display:none}}';
+            '@media print{body{background:#fff}.sec{break-inside:avoid}.section-menu{display:none}' +
+            '.sec-dobra-btn{display:none!important}' +
+            '.sec-dobra:not([open])>.sec-dobra-conteudo{display:block!important}' +
+            '.sec-dobra:not([open])>::details-content{content-visibility:visible!important}}';
     }
 
     function arquivosDoSite(paginas) {
