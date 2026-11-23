@@ -1319,6 +1319,7 @@
             conteudo = info
                 ? '<div class="apb-video" style="width:' + largura + '%"><div class="apb-video-frame">' +
                     '<iframe src="' + esc(info.src) + '" title="Vídeo do ' + esc(info.servico) + '" loading="lazy" ' +
+                    'referrerpolicy="strict-origin-when-cross-origin" ' +
                     'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>' +
                     '</div></div>'
                 : '<div class="apb-video-vazio">Nenhum vídeo informado. Cole a URL de um vídeo do YouTube ou do Vimeo no painel.</div>';
@@ -3162,6 +3163,7 @@
             return '<div class="blk blk--video" style="text-align:' + alinhamento + '">' +
                 '<div class="blk-video" style="width:' + largura + '%"><div class="blk-video-frame">' +
                 '<iframe src="' + esc(info.src) + '" title="Vídeo do ' + esc(info.servico) + '" loading="lazy" ' +
+                'referrerpolicy="strict-origin-when-cross-origin" ' +
                 'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>' +
                 '</div></div></div>';
         }
@@ -3398,7 +3400,7 @@
             '<meta charset="utf-8">\n' +
             '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
             '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data: https: http:; style-src \'unsafe-inline\'; frame-src https://www.youtube.com https://player.vimeo.com; base-uri \'none\'; form-action \'none\'; object-src \'none\'">\n' +
-            '<meta name="referrer" content="no-referrer">\n' +
+            '<meta name="referrer" content="strict-origin-when-cross-origin">\n' +
             '<meta name="color-scheme" content="light">\n' +
             '<title>' + esc(titulo) + '</title>\n' +
             (descricao ? '<meta name="description" content="' + esc(descricao) + '">\n' : '') +
