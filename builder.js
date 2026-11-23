@@ -3140,7 +3140,7 @@
         }
         const blocos = sec.blocos.map(blocoExportHTML).filter(Boolean).join('');
         const conteudo = blocos || '<p class="blk blk--texto">Esta seção ainda não tem conteúdo.</p>';
-        html += '<details class="sec-dobra" open>' +
+        html += '<details class="sec-dobra">' +
             '<summary class="sec-dobra-btn" title="Ocultar ou mostrar o conteúdo desta seção" aria-label="Ocultar ou mostrar o conteúdo desta seção">' +
             '<span class="sec-dobra-rotulo sec-dobra-rotulo--ocultar">Ocultar</span>' +
             '<span class="sec-dobra-rotulo sec-dobra-rotulo--mostrar">Mostrar</span>' +
