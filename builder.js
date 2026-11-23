@@ -124,6 +124,18 @@
         return lum < 0.45;
     }
 
+    function tamanhoBotaoLink(valor) {
+        return ['pequeno', 'medio', 'grande'].indexOf(valor) >= 0 ? valor : 'medio';
+    }
+
+    // Declarações CSS das cores escolhidas para o botão de um link (vazias = cor do tema/contraste).
+    function estiloBotaoLink(b) {
+        let estilo = '';
+        if (b.btnFundo) estilo += 'background:' + b.btnFundo;
+        if (b.btnTexto) estilo += (estilo ? ';' : '') + 'color:' + b.btnTexto;
+        return estilo;
+    }
+
     function fonteValida(nome) {
         return Object.prototype.hasOwnProperty.call(FONTES, nome) ? nome : 'Open Sans';
     }
@@ -223,7 +235,7 @@
                 textoLado: '', textoLadoAtivo: false,
                 imgLadoSrc: '', imgLadoAlt: '', imgLadoLegenda: '', imgLadoAtivo: false, imgLadoAmpliavel: false, imgLadoPequena: false, imgLadoLargura: 100
             },
-            link: { texto: 'Saiba mais', href: '', novaAba: true, estilo: 'botao', alinhamento: 'left' },
+            link: { texto: 'Saiba mais', href: '', novaAba: true, estilo: 'botao', alinhamento: 'left', btnTamanho: 'medio', btnFundo: '', btnTexto: '' },
             lista: { html: '<ul><li>Primeiro item</li><li>Segundo item</li></ul>', alinhamento: 'left' },
             citacao: { html: '<p>Uma ideia que merece destaque.</p>', autor: '', alinhamento: 'left' },
             divisor: {},
@@ -500,6 +512,9 @@
             b.novaAba = bruto.novaAba !== false;
             b.estilo = bruto.estilo === 'link' ? 'link' : 'botao';
             b.alinhamento = alinhamento;
+            b.btnTamanho = tamanhoBotaoLink(bruto.btnTamanho);
+            b.btnFundo = cor(bruto.btnFundo, '');
+            b.btnTexto = cor(bruto.btnTexto, '');
         } else if (tipo === 'espacador') {
             b.altura = Math.min(200, Math.max(8, parseInt(bruto.altura, 10) || 32));
         }
@@ -1273,10 +1288,13 @@
                     '<button class="apb-btn apb-btn--sm" type="button" data-apb-img-escolher="1">Escolher imagem</button></div>';
             }
         } else if (b.tipo === 'link') {
-            const classe = b.estilo === 'link' ? 'apb-link' : 'apb-link apb-link--botao';
+            const botao = b.estilo !== 'link';
+            const classe = botao ? 'apb-link apb-link--botao apb-link--' + tamanhoBotaoLink(b.btnTamanho) : 'apb-link';
+            const estilo = botao ? estiloBotaoLink(b) : '';
             const href = urlSegura(b.href) || '#';
             const alvo = b.novaAba ? ' target="_blank" rel="noopener noreferrer"' : '';
-            conteudo = '<a class="' + classe + '" href="' + esc(href) + '"' + alvo + ' data-apb-field="texto" data-single-line="1">' + esc(b.texto) + '</a>';
+            conteudo = '<a class="' + classe + '"' + (estilo ? ' style="' + estilo + '"' : '') +
+                ' href="' + esc(href) + '"' + alvo + ' data-apb-field="texto" data-single-line="1">' + esc(b.texto) + '</a>';
         } else if (b.tipo === 'divisor') {
             conteudo = '<hr>';
         } else if (b.tipo === 'espacador') {
@@ -1591,9 +1609,25 @@
                 campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: (b.textoLadoAtivo || b.imgLadoAtivo) ? 70 : 100, step: 5, sufixo: '%' }) +
                 campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
         } else if (b.tipo === 'link') {
+            const corAtiva = !!(b.btnFundo || b.btnTexto);
             especifico = campo('Texto exibido no link', 'blocoTexto', b.texto, { placeholder: 'Ex.: Tutorial', hint: 'É o texto que o visitante vê e clica. O endereço fica só por trás dele.' }) +
                 campo('Endereço (URL)', 'blocoHref', b.href, { placeholder: 'https://... ou #ancora', hint: 'Para onde o link leva. Pode ser http(s), mailto:, tel: ou #âncora.' }) +
                 campo('Estilo', 'blocoEstilo', b.estilo, { tipo: 'select', opcoes: [{ v: 'botao', l: 'Botão' }, { v: 'link', l: 'Link de texto' }] }) +
+                (b.estilo === 'botao'
+                    ? '<div class="apb-divider"></div>' +
+                        '<div class="apb-insp-head">Aparência do botão</div>' +
+                        campo('Tamanho do botão', 'blocoBtnTamanho', b.btnTamanho, {
+                            tipo: 'select',
+                            opcoes: [{ v: 'pequeno', l: 'Pequeno' }, { v: 'medio', l: 'Médio' }, { v: 'grande', l: 'Grande' }],
+                            hint: 'Vale para a prévia no editor e para o botão no HTML exportado.'
+                        }) +
+                        campo('Personalizar cor do botão', 'blocoBtnCorAtivo', corAtiva, { tipo: 'checkbox' }) +
+                        (corAtiva
+                            ? campo('Cor de fundo do botão', 'blocoBtnFundo', b.btnFundo || '#2563eb', { tipo: 'color' }) +
+                                campo('Cor do texto do botão', 'blocoBtnTexto', b.btnTexto || '#ffffff', { tipo: 'color' }) +
+                                '<p class="apb-hint">As cores escolhidas aparecem no editor e na exportação e substituem as cores automáticas do tema.</p>'
+                            : '<p class="apb-hint">Sem personalizar, o botão usa a cor principal do tema e se ajusta a fundos escuros.</p>')
+                    : '<p class="apb-hint">Tamanho e cor de botão valem quando o Estilo for “Botão”.</p>') +
                 campo('Abrir em nova aba', 'blocoNovaAba', b.novaAba, { tipo: 'checkbox' }) +
                 campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
         } else if (b.tipo === 'espacador') {
@@ -2319,6 +2353,24 @@
             case 'blocoNivel': b.nivel = ['h2', 'h3', 'h4'].indexOf(v) >= 0 ? v : b.nivel; return true;
             case 'blocoAlinhamento': b.alinhamento = ['left', 'center', 'right'].indexOf(v) >= 0 ? v : b.alinhamento; return true;
             case 'blocoEstilo': b.estilo = v === 'link' ? 'link' : 'botao'; return true;
+            case 'blocoBtnTamanho':
+                b.btnTamanho = tamanhoBotaoLink(v);
+                return true;
+            case 'blocoBtnCorAtivo':
+                if (valor) {
+                    if (!b.btnFundo) b.btnFundo = pg.tema.primaria;
+                    if (!b.btnTexto) b.btnTexto = '#ffffff';
+                } else {
+                    b.btnFundo = '';
+                    b.btnTexto = '';
+                }
+                return true;
+            case 'blocoBtnFundo':
+                if (b.btnFundo) b.btnFundo = cor(v, b.btnFundo);
+                return true;
+            case 'blocoBtnTexto':
+                if (b.btnTexto) b.btnTexto = cor(v, b.btnTexto);
+                return true;
             case 'blocoNovaAba': b.novaAba = !!valor; return true;
             case 'blocoAltura': b.altura = Math.min(200, Math.max(8, parseInt(v, 10) || b.altura)); return true;
             case 'blocoImagemLargura': {
@@ -2397,7 +2449,7 @@
         }
         if (aplicou) {
             if (prop.indexOf('secao') === 0) renderSectionsList();
-            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo' || prop === 'blocoImgLadoAtivo' || prop === 'secaoFundoAtivo') renderInspector();
+            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo' || prop === 'blocoImgLadoAtivo' || prop === 'secaoFundoAtivo' || prop === 'blocoEstilo' || prop === 'blocoBtnCorAtivo') renderInspector();
             marcarSujo();
             agendarCanvas();
         }
@@ -3053,9 +3105,12 @@
         if (b.tipo === 'link') {
             const href = urlSegura(b.href) || '#';
             const alvo = b.novaAba ? ' target="_blank" rel="noopener noreferrer"' : '';
-            const classe = b.estilo === 'link' ? 'btn btn--link' : 'btn';
+            const botao = b.estilo !== 'link';
+            const classe = botao ? 'btn btn--' + tamanhoBotaoLink(b.btnTamanho) : 'btn btn--link';
+            const estilo = botao ? estiloBotaoLink(b) : '';
             return '<div class="blk blk--link" style="text-align:' + alinhamento + '">' +
-                '<a class="' + classe + '" href="' + esc(href) + '"' + alvo + '>' + esc(b.texto) + '</a></div>';
+                '<a class="' + classe + '"' + (estilo ? ' style="' + estilo + '"' : '') +
+                ' href="' + esc(href) + '"' + alvo + '>' + esc(b.texto) + '</a></div>';
         }
         if (b.tipo === 'citacao') {
             const html = sanitizarHTML(b.html);
@@ -3163,6 +3218,9 @@
             '.img-lightbox img{width:auto;max-width:94vw;max-height:86vh;border-radius:10px;box-shadow:0 24px 60px rgba(0,0,0,.5)}' +
             '.img-lightbox-fechar{position:fixed;top:14px;right:22px;color:#fff;font-size:2rem;line-height:1;text-decoration:none;font-weight:400}' +
             '.blk--link .btn{display:inline-block;padding:12px 22px;border-radius:8px;background:var(--primary);color:#fff;font-weight:600}' +
+            '.blk--link .btn--pequeno{padding:8px 14px;font-size:.9rem}' +
+            '.blk--link .btn--medio{padding:12px 22px;font-size:1rem}' +
+            '.blk--link .btn--grande{padding:16px 30px;font-size:1.15rem}' +
             '.blk--link .btn--link{background:none;color:var(--primary);padding:0;text-decoration:underline}' +
             '.blk-divisor{border:0;border-top:1px solid rgba(15,23,42,.14);margin:28px 0}' +
             '.site-menu{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;max-width:var(--max);margin:0 auto;padding:18px 24px;border-bottom:1px solid rgba(15,23,42,.1)}' +

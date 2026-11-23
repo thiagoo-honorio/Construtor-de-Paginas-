@@ -718,6 +718,9 @@ body.apb-lock { overflow: hidden !important; }
     font-weight: 700;
     box-shadow: 0 8px 18px rgba(15, 23, 42, .16);
 }
+#apbRoot .apb-link--pequeno { padding: 7px 14px; font-size: 12px; }
+#apbRoot .apb-link--medio { padding: 11px 22px; font-size: 14px; }
+#apbRoot .apb-link--grande { padding: 16px 30px; font-size: 16px; }
 #apbRoot .apb-sec--hero .apb-link--botao { background: #fff; color: #0f172a; }
 #apbRoot .apb-sec--hero .apb-link:not(.apb-link--botao) { color: #fff; }
 #apbRoot .apb-block--link[data-alinhamento="center"] { text-align: center; }
