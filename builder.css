@@ -755,6 +755,140 @@ body.apb-lock { overflow: hidden !important; }
     text-align: center;
 }
 
+/* Prévia do bloco de etapas (chevrons em sequência). */
+#apbRoot .apb-etapas {
+    list-style: none;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 0;
+    padding: 0 0 4px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    max-width: 100%;
+}
+#apbRoot .apb-etapa {
+    flex: 0 0 var(--etapa-larg, 175px);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: var(--etapa-alt, 132px);
+    margin-left: -14px;
+    padding: 18px 26px 18px 34px;
+    background: var(--etapa-cor, var(--page-primary));
+    color: var(--etapa-fg, var(--page-etapas-fg, #fff));
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%);
+}
+#apbRoot .apb-etapa:first-child {
+    margin-left: 0;
+    padding-left: 20px;
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+}
+#apbRoot .apb-etapa:last-child {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 16px 50%);
+}
+#apbRoot .apb-etapa:only-child {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+}
+#apbRoot .apb-etapa-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-bottom: 8px;
+    border-radius: 50%;
+    background: var(--etapa-badge, var(--page-etapas-badge, rgba(255, 255, 255, .22)));
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+}
+#apbRoot .apb-etapa-titulo { display: block; font-size: 14px; line-height: 1.25; margin-bottom: 6px; }
+#apbRoot .apb-etapa-desc { display: block; font-size: 12px; line-height: 1.45; opacity: .92; }
+#apbRoot .apb-etapa-link {
+    display: inline-block;
+    margin-top: 10px;
+    color: var(--etapa-fg, var(--page-etapas-fg, #fff));
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    pointer-events: none;
+}
+#apbRoot .apb-etapas-vazio {
+    padding: 22px 16px;
+    border: 1px dashed var(--apb-borda);
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 13px;
+    text-align: center;
+}
+@media (max-width: 640px) {
+    #apbRoot .apb-etapa { padding: 14px 22px 14px 30px; }
+    #apbRoot .apb-etapa:first-child { padding-left: 16px; }
+}
+/* Alturas abaixo de 80px: o chevron fica fino e a descrição vai para baixo dele. */
+#apbRoot .apb-etapas--compactas .apb-etapa {
+    display: block;
+    min-height: 0;
+    padding: 0;
+    background: none;
+    color: var(--page-fg, #0f172a);
+    clip-path: none;
+}
+#apbRoot .apb-etapas--compactas .apb-etapa:first-child,
+#apbRoot .apb-etapas--compactas .apb-etapa:last-child,
+#apbRoot .apb-etapas--compactas .apb-etapa:only-child {
+    padding-left: 0;
+    clip-path: none;
+}
+#apbRoot .apb-etapas--compactas .apb-etapa-corpo {
+    display: flex;
+    align-items: center;
+    height: var(--etapa-alt, 132px);
+    padding: 2px 16px 2px 24px;
+    background: var(--etapa-cor, var(--page-primary));
+    color: var(--etapa-fg, var(--page-etapas-fg, #fff));
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%);
+}
+#apbRoot .apb-etapas--compactas .apb-etapa:first-child .apb-etapa-corpo {
+    padding-left: 12px;
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+}
+#apbRoot .apb-etapas--compactas .apb-etapa:last-child .apb-etapa-corpo {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 16px 50%);
+}
+#apbRoot .apb-etapas--compactas .apb-etapa:only-child .apb-etapa-corpo {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+}
+#apbRoot .apb-etapas--compactas .apb-etapa-titulo {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#apbRoot .apb-etapas--compactas .apb-etapa-desc {
+    display: block;
+    padding: 6px 16px 0 24px;
+    font-size: 11px;
+    line-height: 1.35;
+    opacity: .82;
+}
+#apbRoot .apb-etapas--compactas .apb-etapa:first-child .apb-etapa-desc { padding-left: 12px; }
+#apbRoot .apb-etapas--compactas .apb-etapa-link {
+    display: inline-block;
+    margin: 4px 16px 0 24px;
+    color: var(--page-primary);
+    font-size: 10px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+#apbRoot .apb-etapas--compactas .apb-etapa:first-child .apb-etapa-link { margin-left: 12px; }
+
 #apbRoot .apb-block--divisor hr {
     border: 0;
     border-top: 1px solid var(--apb-borda);
@@ -899,6 +1033,31 @@ body.apb-lock { overflow: hidden !important; }
     font-size: 12px;
     line-height: 1;
 }
+#apbRoot .apb-etapas-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+}
+#apbRoot .apb-etapa-editor {
+    padding: 10px;
+    border: 1px solid var(--apb-borda);
+    border-radius: 9px;
+    background: #f8fafc;
+}
+#apbRoot .apb-etapa-editor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+#apbRoot .apb-etapa-editor .apb-field { margin-bottom: 6px; }
+#apbRoot .apb-etapa-editor .apb-field:last-child { margin-bottom: 0; }
+#apbRoot .apb-etapa-editor .apb-input,
+#apbRoot .apb-etapa-editor .apb-textarea { font-size: 12.5px; }
+#apbRoot .apb-etapa-remover { color: #b91c1c; }
 #apbRoot .apb-sr-only {
     position: absolute;
     width: 1px;

@@ -9,7 +9,7 @@
     const LS_KEY = 'utfpr_page_builder_v1';
     const LS_BACKUP = 'utfpr_page_builder_v1_backup';
     const MAX_HISTORICO = 60;
-    const LIMITES = { paginas: 50, secoes: 60, blocos: 200, html: 60000, texto: 6000, imagem: 4 * 1024 * 1024 };
+    const LIMITES = { paginas: 50, secoes: 60, blocos: 200, itensEtapas: 12, html: 60000, texto: 6000, imagem: 4 * 1024 * 1024 };
 
     const FONTES = {
         'Open Sans': { stack: "'Open Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif", google: 'Open+Sans:wght@400;600;700;800' },
@@ -30,6 +30,7 @@
         titulo: 'Título',
         imagem: 'Imagem',
         video: 'Vídeo',
+        etapas: 'Etapas',
         link: 'Link / botão',
         lista: 'Lista',
         citacao: 'Citação',
@@ -135,6 +136,41 @@
         if (b.btnFundo) estilo += 'background:' + b.btnFundo;
         if (b.btnTexto) estilo += (estilo ? ';' : '') + 'color:' + b.btnTexto;
         return estilo;
+    }
+
+    // Link opcional de uma etapa. O mesmo HTML vale para a prévia e para a exportação.
+    function linkEtapaHTML(item, canvas) {
+        const href = urlSegura(item && item.url);
+        if (!href) return '';
+        const externo = /^https?:\/\//i.test(href);
+        const alvo = externo ? ' target="_blank" rel="noopener noreferrer"' : '';
+        const classe = canvas ? 'apb-etapa-link' : 'blk-etapa-link';
+        return '<a class="' + classe + '" href="' + esc(href) + '"' + alvo + '>' +
+            esc((item && item.textoLink) || 'Saiba mais') + '</a>';
+    }
+
+    // Declarações inline só quando o bloco sai do padrão (tema, 132px, 175px, 100%).
+    function estilosEtapas(b) {
+        const altura = Math.min(240, Math.max(20, parseInt(b.altura, 10) || 132));
+        const larguraEtapa = Math.min(320, Math.max(120, parseInt(b.larguraEtapa, 10) || 175));
+        const largura = Math.min(100, Math.max(25, parseInt(b.largura, 10) || 100));
+        const alinhamento = ['left', 'center', 'right'].indexOf(b.alinhamento) >= 0 ? b.alinhamento : 'left';
+        let lista = '';
+        let bloco = '';
+        if (altura !== 132) lista += '--etapa-alt:' + altura + 'px;';
+        if (larguraEtapa !== 175) lista += '--etapa-larg:' + larguraEtapa + 'px;';
+        if (b.corAtiva && b.cor) {
+            const escura = fundoEscuro(b.cor);
+            lista += '--etapa-cor:' + b.cor + ';--etapa-fg:' + (escura ? '#ffffff' : '#0f172a') +
+                ';--etapa-badge:' + (escura ? 'rgba(255,255,255,.22)' : 'rgba(15,23,42,.14)') + ';';
+        }
+        lista = lista.replace(/;$/, '');
+        if (largura !== 100 || alinhamento !== 'left') {
+            bloco = 'width:' + largura + '%';
+            if (alinhamento === 'center') bloco += ';margin-left:auto;margin-right:auto';
+            else if (alinhamento === 'right') bloco += ';margin-left:auto;margin-right:0';
+        }
+        return { lista: lista, bloco: bloco, compacta: altura < 80 };
     }
 
     function fonteValida(nome) {
@@ -256,6 +292,21 @@
                 imgLadoSrc: '', imgLadoAlt: '', imgLadoLegenda: '', imgLadoAtivo: false, imgLadoAmpliavel: false, imgLadoPequena: false, imgLadoLargura: 100
             },
             video: { url: '', largura: 100, alinhamento: 'center' },
+            etapas: {
+                itens: [
+                    { id: uid('et'), titulo: 'Inscrição no site', descricao: 'Acesse o site indicado pela instituição e faça sua inscrição.', url: '', textoLink: 'Abrir site' },
+                    { id: uid('et'), titulo: 'Documentos', descricao: 'Separe RG/CPF, comprovante de residência, histórico escolar e declaração de matrícula.', url: '', textoLink: 'Ver documentos' },
+                    { id: uid('et'), titulo: 'Análise da inscrição', descricao: 'A instituição confere os dados e confirma a vaga disponível.', url: '', textoLink: '' },
+                    { id: uid('et'), titulo: 'Contratação', descricao: 'Assine o termo de compromisso com a empresa e a instituição de ensino.', url: '', textoLink: '' },
+                    { id: uid('et'), titulo: 'Início do estágio', descricao: 'Comece as atividades e registre os relatórios no sistema.', url: '', textoLink: '' }
+                ],
+                corAtiva: false,
+                cor: '',
+                altura: 132,
+                larguraEtapa: 175,
+                largura: 100,
+                alinhamento: 'left'
+            },
             link: { texto: 'Saiba mais', href: '', novaAba: true, estilo: 'botao', alinhamento: 'left', btnTamanho: 'medio', btnFundo: '', btnTexto: '' },
             lista: { html: '<ul><li>Primeiro item</li><li>Segundo item</li></ul>', alinhamento: 'left' },
             citacao: { html: '<p>Uma ideia que merece destaque.</p>', autor: '', alinhamento: 'left' },
@@ -526,6 +577,24 @@
             b.textoLadoAtivo = bruto.textoLadoAtivo === true;
             b.imgLadoAtivo = bruto.imgLadoAtivo === true && !b.textoLadoAtivo;
             if ((b.textoLadoAtivo || b.imgLadoAtivo) && b.largura > 70) b.largura = 70;
+            b.alinhamento = alinhamento;
+        } else if (tipo === 'etapas') {
+            const vistosItens = new Set();
+            b.itens = (Array.isArray(bruto.itens) ? bruto.itens : []).slice(0, LIMITES.itensEtapas).map(function (it) {
+                if (!it || typeof it !== 'object') return null;
+                return {
+                    id: idUnico(it.id, 'et', vistosItens),
+                    titulo: texto(it.titulo, 120),
+                    descricao: texto(it.descricao, 500),
+                    url: urlSegura(it.url),
+                    textoLink: texto(it.textoLink, 80)
+                };
+            }).filter(Boolean);
+            b.cor = cor(bruto.cor, '');
+            b.corAtiva = bruto.corAtiva === true && !!b.cor;
+            b.altura = Math.min(240, Math.max(20, parseInt(bruto.altura, 10) || 132));
+            b.larguraEtapa = Math.min(320, Math.max(120, parseInt(bruto.larguraEtapa, 10) || 175));
+            b.largura = Math.min(100, Math.max(25, parseInt(bruto.largura, 10) || 100));
             b.alinhamento = alinhamento;
         } else if (tipo === 'video') {
             b.url = urlVideoSegura(bruto.url);
@@ -980,6 +1049,7 @@
           <button class="apb-btn" type="button" data-apb-add="titulo">Título</button>
           <button class="apb-btn" type="button" data-apb-add="imagem">Imagem</button>
           <button class="apb-btn" type="button" data-apb-add="video">Vídeo</button>
+          <button class="apb-btn" type="button" data-apb-add="etapas">Etapas</button>
           <button class="apb-btn" type="button" data-apb-add="link">Link</button>
           <button class="apb-btn" type="button" data-apb-add="lista">Lista</button>
           <button class="apb-btn" type="button" data-apb-add="citacao">Citação</button>
@@ -1313,6 +1383,29 @@
                 conteudo = '<div class="apb-img-placeholder"><span>Nenhuma imagem selecionada.</span>' +
                     '<button class="apb-btn apb-btn--sm" type="button" data-apb-img-escolher="1">Escolher imagem</button></div>';
             }
+        } else if (b.tipo === 'etapas') {
+            const itens = Array.isArray(b.itens) ? b.itens : [];
+            if (!itens.length) {
+                conteudo = '<div class="apb-etapas-vazio">Nenhuma etapa ainda. Abra o painel e adicione as etapas.</div>';
+            } else {
+                const estilos = estilosEtapas(b);
+                const estiloOl = [estilos.bloco, estilos.lista].filter(Boolean).join(';');
+                conteudo = '<ol class="apb-etapas' + (estilos.compacta ? ' apb-etapas--compactas' : '') + '"' +
+                    (estiloOl ? ' style="' + esc(estiloOl) + '"' : '') + '>' + itens.map(function (item, indice) {
+                    const titulo = '<strong class="apb-etapa-titulo">' + esc(item.titulo || 'Etapa ' + (indice + 1)) + '</strong>';
+                    const descricao = item.descricao ? '<span class="apb-etapa-desc">' + esc(item.descricao) + '</span>' : '';
+                    if (estilos.compacta) {
+                        return '<li class="apb-etapa">' +
+                            '<span class="apb-etapa-corpo">' + titulo + '</span>' +
+                            descricao + linkEtapaHTML(item, true) +
+                            '</li>';
+                    }
+                    return '<li class="apb-etapa">' +
+                        '<span class="apb-etapa-num" aria-hidden="true">' + (indice + 1) + '</span>' +
+                        titulo + descricao + linkEtapaHTML(item, true) +
+                        '</li>';
+                }).join('') + '</ol>';
+            }
         } else if (b.tipo === 'video') {
             const info = videoEmbed(b.url);
             const largura = Math.min(100, Math.max(25, parseInt(b.largura, 10) || 100));
@@ -1420,6 +1513,8 @@
         page.style.setProperty('--page-bg', pg.tema.fundo);
         page.style.setProperty('--page-fg', pg.tema.texto);
         page.style.setProperty('--page-soft', corRgba(pg.tema.primaria, 0.09));
+        page.style.setProperty('--page-etapas-fg', fundoEscuro(pg.tema.primaria) ? '#ffffff' : '#0f172a');
+        page.style.setProperty('--page-etapas-badge', fundoEscuro(pg.tema.primaria) ? 'rgba(255,255,255,.22)' : 'rgba(15,23,42,.14)');
         page.style.setProperty('--page-max', pg.tema.largura + 'px');
         page.style.fontFamily = FONTES[pg.tema.fonte].stack;
     }
@@ -1644,6 +1739,48 @@
                     : '') +
                 campo('Largura', 'blocoImagemLargura', b.largura, { tipo: 'range', min: 15, max: (b.textoLadoAtivo || b.imgLadoAtivo) ? 70 : 100, step: 5, sufixo: '%' }) +
                 campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos });
+        } else if (b.tipo === 'etapas') {
+            const itens = Array.isArray(b.itens) ? b.itens : [];
+            const linhas = itens.map(function (item, indice) {
+                const id = esc(item.id);
+                const rotulo = item.titulo || 'Etapa ' + (indice + 1);
+                return '<div class="apb-etapa-editor" data-apb-etapa-item="' + id + '">' +
+                    '<div class="apb-etapa-editor-head"><strong>Etapa ' + (indice + 1) + '</strong>' +
+                    '<div class="apb-menu-row-btns">' +
+                    '<button class="apb-icon-btn apb-menu-btn" type="button" data-apb-etapa-acao="up" data-apb-etapa-id="' + id + '" title="Subir" aria-label="Subir ' + esc(rotulo) + '"' + (indice === 0 ? ' disabled' : '') + '>↑</button>' +
+                    '<button class="apb-icon-btn apb-menu-btn" type="button" data-apb-etapa-acao="down" data-apb-etapa-id="' + id + '" title="Descer" aria-label="Descer ' + esc(rotulo) + '"' + (indice === itens.length - 1 ? ' disabled' : '') + '>↓</button>' +
+                    '<button class="apb-icon-btn apb-menu-btn apb-etapa-remover" type="button" data-apb-etapa-acao="del" data-apb-etapa-id="' + id + '" title="Remover etapa" aria-label="Remover ' + esc(rotulo) + '">×</button>' +
+                    '</div></div>' +
+                    '<div class="apb-field"><label>Título da etapa</label>' +
+                    '<input class="apb-input" type="text" data-apb-etapa-campo="titulo" data-apb-etapa-id="' + id + '" value="' + esc(item.titulo || '') + '" placeholder="Etapa ' + (indice + 1) + '" aria-label="Título da etapa ' + (indice + 1) + '"></div>' +
+                    '<div class="apb-field"><label>Descrição</label>' +
+                    '<textarea class="apb-textarea" rows="3" data-apb-etapa-campo="descricao" data-apb-etapa-id="' + id + '" placeholder="O que acontece nesta etapa?" aria-label="Descrição da etapa ' + (indice + 1) + '">' + esc(item.descricao || '') + '</textarea></div>' +
+                    '<div class="apb-field"><label>Endereço (URL) — opcional</label>' +
+                    '<input class="apb-input" type="text" data-apb-etapa-campo="url" data-apb-etapa-id="' + id + '" value="' + esc(item.url || '') + '" placeholder="https://..." aria-label="Endereço da etapa ' + (indice + 1) + '"></div>' +
+                    '<div class="apb-field"><label>Texto do link</label>' +
+                    '<input class="apb-input" type="text" data-apb-etapa-campo="textoLink" data-apb-etapa-id="' + id + '" value="' + esc(item.textoLink || '') + '" placeholder="Ex.: Abrir site" aria-label="Texto do link da etapa ' + (indice + 1) + '"></div>' +
+                    '</div>';
+            }).join('');
+            const corAtiva = !!(b.corAtiva && b.cor);
+            especifico = '<div class="apb-insp-head">Etapas <span class="apb-tag">' + itens.length + '/' + LIMITES.itensEtapas + '</span></div>' +
+                '<p class="apb-hint">Cada etapa vira um chevron na página. Edite o título, a descrição e, se quiser, um link com texto visível.</p>' +
+                '<div class="apb-divider"></div>' +
+                '<div class="apb-insp-head">Aparência e tamanho</div>' +
+                campo('Cor própria para as etapas', 'blocoEtapasCorAtivo', corAtiva, { hint: 'Desligado = cor principal do tema.' }) +
+                (corAtiva
+                    ? campo('Cor de fundo das etapas', 'blocoEtapasCor', b.cor || '#2563eb', {
+                        tipo: 'color',
+                        hint: 'A cor do texto e do número é escolhida automaticamente para manter contraste.'
+                    })
+                    : '<p class="apb-hint">As etapas usam a cor principal do tema desta página.</p>') +
+                campo('Altura de cada etapa', 'blocoEtapasAltura', b.altura, { tipo: 'range', min: 20, max: 240, step: 4, sufixo: ' px' }) +
+                campo('Largura de cada etapa', 'blocoEtapasLarguraItem', b.larguraEtapa, { tipo: 'range', min: 120, max: 320, step: 5, sufixo: ' px' }) +
+                campo('Largura do bloco', 'blocoEtapasLargura', b.largura, { tipo: 'range', min: 25, max: 100, step: 5, sufixo: '%' }) +
+                campo('Alinhamento', 'blocoAlinhamento', b.alinhamento, { tipo: 'select', opcoes: alinhamentos }) +
+                '<div class="apb-divider"></div>' +
+                '<div class="apb-etapas-editor">' + (linhas || '<p class="apb-hint">Nenhuma etapa ainda.</p>') + '</div>' +
+                '<button class="apb-btn apb-btn--sm" type="button" data-apb-etapa-acao="add">+ Adicionar etapa</button>' +
+                '<p class="apb-hint">Use ↑ ↓ para mudar a ordem e × para remover. Limite de ' + LIMITES.itensEtapas + ' etapas.</p>';
         } else if (b.tipo === 'video') {
             especifico = campo('URL do vídeo', 'blocoVideoUrl', b.url, {
                 placeholder: 'https://youtube.com/watch?v=... ou vimeo.com/123456',
@@ -1764,6 +1901,17 @@
         return true;
     }
 
+    // Ao duplicar um bloco de etapas, cada item precisa de um id novo (o id identifica o item no painel).
+    function reidEtapas(b) {
+        if (!b || b.tipo !== 'etapas' || !Array.isArray(b.itens)) return;
+        const vistos = new Set();
+        b.itens = b.itens.map(function (it) {
+            const copia = clonar(it);
+            copia.id = idUnico('', 'et', vistos);
+            return copia;
+        });
+    }
+
     function copySecao(sec) {
         const copia = clonar(sec);
         copia.id = uid('sec');
@@ -1771,6 +1919,7 @@
         copia.blocos = (copia.blocos || []).map(function (b) {
             const nb = clonar(b);
             nb.id = uid('blk');
+            reidEtapas(nb);
             return nb;
         });
         return copia;
@@ -1999,6 +2148,7 @@
         registrar(function () {
             const copia = clonar(sec.blocos[i]);
             copia.id = uid('blk');
+            reidEtapas(copia);
             sec.blocos.splice(i + 1, 0, copia);
             selecao = { tipo: 'bloco', id: copia.id };
         });
@@ -2418,6 +2568,27 @@
                 return true;
             case 'blocoNovaAba': b.novaAba = !!valor; return true;
             case 'blocoAltura': b.altura = Math.min(200, Math.max(8, parseInt(v, 10) || b.altura)); return true;
+            case 'blocoEtapasCorAtivo':
+                if (valor) {
+                    b.corAtiva = true;
+                    if (!b.cor) b.cor = pg.tema.primaria;
+                } else {
+                    b.corAtiva = false;
+                    b.cor = '';
+                }
+                return true;
+            case 'blocoEtapasCor':
+                if (b.corAtiva) b.cor = cor(v, b.cor || pg.tema.primaria);
+                return true;
+            case 'blocoEtapasAltura':
+                b.altura = Math.min(240, Math.max(20, parseInt(v, 10) || b.altura));
+                return true;
+            case 'blocoEtapasLarguraItem':
+                b.larguraEtapa = Math.min(320, Math.max(120, parseInt(v, 10) || b.larguraEtapa));
+                return true;
+            case 'blocoEtapasLargura':
+                b.largura = Math.min(100, Math.max(25, parseInt(v, 10) || b.largura));
+                return true;
             case 'blocoImagemLargura': {
                 const maxLargura = temLado(b) ? 70 : 100;
                 b.largura = Math.min(maxLargura, Math.max(15, parseInt(v, 10) || b.largura));
@@ -2503,7 +2674,7 @@
         }
         if (aplicou) {
             if (prop.indexOf('secao') === 0) renderSectionsList();
-            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo' || prop === 'blocoImgLadoAtivo' || prop === 'secaoFundoAtivo' || prop === 'blocoEstilo' || prop === 'blocoBtnCorAtivo') renderInspector();
+            if (prop === 'blocoImagemPequena' || prop === 'blocoTextoLadoAtivo' || prop === 'blocoImgLadoAtivo' || prop === 'secaoFundoAtivo' || prop === 'blocoEstilo' || prop === 'blocoBtnCorAtivo' || prop === 'blocoEtapasCorAtivo') renderInspector();
             marcarSujo();
             agendarCanvas();
         }
@@ -2527,6 +2698,58 @@
         item.texto = texto(el.value, 120);
         marcarSujo();
         agendarCanvas();
+    }
+
+    function aoEtapaCampo(el) {
+        const b = blocoAtual();
+        if (!b || b.tipo !== 'etapas' || !Array.isArray(b.itens)) return;
+        const item = b.itens.find(function (it) { return it.id === el.dataset.apbEtapaId; });
+        if (!item) return;
+        const campo = el.dataset.apbEtapaCampo;
+        const limites = { titulo: 120, descricao: 500, textoLink: 80 };
+        if (campo !== 'url' && !Object.prototype.hasOwnProperty.call(limites, campo)) return;
+        if (antesInsp === null) antesInsp = snapshot();
+        if (campo === 'url') {
+            if (!el.value.trim()) item.url = '';
+            else {
+                const segura = urlSegura(el.value);
+                if (segura) item.url = segura;
+            }
+        } else {
+            item[campo] = texto(el.value, limites[campo]);
+        }
+        marcarSujo();
+        agendarCanvas();
+    }
+
+    function acaoEtapa(acao, id) {
+        const b = blocoAtual();
+        if (!b || b.tipo !== 'etapas') return;
+        if (!Array.isArray(b.itens)) b.itens = [];
+        const itens = b.itens;
+        if (acao === 'add') {
+            if (itens.length >= LIMITES.itensEtapas) {
+                toast('Limite de ' + LIMITES.itensEtapas + ' etapas atingido.', 'aviso');
+                return;
+            }
+            registrar(function () {
+                itens.push({ id: uid('et'), titulo: 'Nova etapa', descricao: '', url: '', textoLink: '' });
+            });
+            return;
+        }
+        const i = itens.findIndex(function (it) { return it.id === id; });
+        if (i < 0) return;
+        if (acao === 'del') {
+            registrar(function () { itens.splice(i, 1); });
+            return;
+        }
+        const j = i + (acao === 'up' ? -1 : 1);
+        if (j < 0 || j >= itens.length) return;
+        registrar(function () {
+            const tmp = itens[i];
+            itens[i] = itens[j];
+            itens[j] = tmp;
+        });
     }
 
     function definirMenuSecaoVisivel(secaoId, visivel) {
@@ -2717,18 +2940,41 @@
                 if (el.type === 'range') {
                     const out = el.parentNode ? el.parentNode.querySelector('output') : null;
                     if (out) {
-                        const sufixo = el.dataset.apbProp === 'blocoImagemLargura' ? '%' : ' px';
+                        const prop = el.dataset.apbProp;
+                        const sufixo = (prop === 'blocoImagemLargura' || prop === 'blocoVideoLargura' || prop === 'blocoEtapasLargura') ? '%' : ' px';
                         out.textContent = el.value + sufixo;
                     }
                 }
                 return;
             }
+            const ec = e.target.closest ? e.target.closest('[data-apb-etapa-campo]') : null;
+            if (ec) { aoEtapaCampo(ec); return; }
             const mt = e.target.closest ? e.target.closest('[data-apb-menu-texto]') : null;
             if (mt) { aoMenuTexto(mt); return; }
             const mst = e.target.closest ? e.target.closest('[data-apb-ms-texto]') : null;
             if (mst) aoMenuSecaoTexto(mst);
         });
         refs.inspector.addEventListener('change', function (e) {
+            const ec = e.target.closest ? e.target.closest('[data-apb-etapa-campo]') : null;
+            if (ec) {
+                flushInsp();
+                aoEtapaCampo(ec);
+                flushInsp();
+                const b = blocoAtual();
+                const item = b && Array.isArray(b.itens)
+                    ? b.itens.find(function (it) { return it.id === ec.dataset.apbEtapaId; })
+                    : null;
+                if (item) {
+                    if (ec.dataset.apbEtapaCampo === 'url') {
+                        if (ec.value.trim() && !item.url) {
+                            toast('Endereço inválido. Use http://, https://, mailto:, tel: ou #âncora.', 'erro');
+                        }
+                        ec.value = item.url || '';
+                    }
+                    renderCanvas();
+                }
+                return;
+            }
             const mt = e.target.closest ? e.target.closest('[data-apb-menu-texto]') : null;
             if (mt) {
                 aoMenuTexto(mt);
@@ -2792,6 +3038,13 @@
             }
         });
         refs.inspector.addEventListener('click', function (e) {
+            const ea = e.target.closest('[data-apb-etapa-acao]');
+            if (ea) {
+                e.preventDefault();
+                flushInsp();
+                acaoEtapa(ea.dataset.apbEtapaAcao, ea.dataset.apbEtapaId);
+                return;
+            }
             const ma = e.target.closest('[data-apb-menu-acao]');
             if (ma) {
                 e.preventDefault();
@@ -3167,6 +3420,27 @@
                 'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>' +
                 '</div></div></div>';
         }
+        if (b.tipo === 'etapas') {
+            const itens = Array.isArray(b.itens) ? b.itens : [];
+            if (!itens.length) return '';
+            const estilos = estilosEtapas(b);
+            return '<div class="blk blk--etapas"' + (estilos.bloco ? ' style="' + esc(estilos.bloco) + '"' : '') + '>' +
+                '<ol class="blk-etapas' + (estilos.compacta ? ' blk-etapas--compactas' : '') + '"' +
+                (estilos.lista ? ' style="' + esc(estilos.lista) + '"' : '') + '>' + itens.map(function (item, indice) {
+                const titulo = '<strong class="blk-etapa-titulo">' + esc(item.titulo || 'Etapa ' + (indice + 1)) + '</strong>';
+                const descricao = item.descricao ? '<span class="blk-etapa-desc">' + esc(item.descricao) + '</span>' : '';
+                if (estilos.compacta) {
+                    return '<li class="blk-etapa">' +
+                        '<span class="blk-etapa-corpo">' + titulo + '</span>' +
+                        descricao + linkEtapaHTML(item, false) +
+                        '</li>';
+                }
+                return '<li class="blk-etapa">' +
+                    '<span class="blk-etapa-num" aria-hidden="true">' + (indice + 1) + '</span>' +
+                    titulo + descricao + linkEtapaHTML(item, false) +
+                    '</li>';
+            }).join('') + '</ol></div>';
+        }
         if (b.tipo === 'link') {
             const href = urlSegura(b.href) || '#';
             const alvo = b.novaAba ? ' target="_blank" rel="noopener noreferrer"' : '';
@@ -3206,9 +3480,9 @@
         const blocos = sec.blocos.map(blocoExportHTML).filter(Boolean).join('');
         const conteudo = blocos || '<p class="blk blk--texto">Esta seção ainda não tem conteúdo.</p>';
         html += '<details class="sec-dobra">' +
-            '<summary class="sec-dobra-btn" title="Ocultar ou mostrar o conteúdo desta seção" aria-label="Ocultar ou mostrar o conteúdo desta seção">' +
+            '<summary class="sec-dobra-btn" title="Ocultar ou expandir o conteúdo desta seção" aria-label="Ocultar ou expandir o conteúdo desta seção">' +
             '<span class="sec-dobra-rotulo sec-dobra-rotulo--ocultar">Ocultar</span>' +
-            '<span class="sec-dobra-rotulo sec-dobra-rotulo--mostrar">Mostrar</span>' +
+            '<span class="sec-dobra-rotulo sec-dobra-rotulo--expandir">Expandir</span>' +
             '<span class="sec-dobra-seta" aria-hidden="true"></span>' +
             '</summary>' +
             '<div class="sec-dobra-conteudo">' + conteudo + '</div>' +
@@ -3219,7 +3493,7 @@
 
     function cssExportacao(pg) {
         const fonte = FONTES[fonteValida(pg.tema.fonte)].stack;
-        return ':root{--primary:' + pg.tema.primaria + ';--bg:' + pg.tema.fundo + ';--fg:' + pg.tema.texto + ';--soft:' + corRgba(pg.tema.primaria, 0.09) + ';--max:' + pg.tema.largura + 'px}' +
+        return ':root{--primary:' + pg.tema.primaria + ';--bg:' + pg.tema.fundo + ';--fg:' + pg.tema.texto + ';--soft:' + corRgba(pg.tema.primaria, 0.09) + ';--etapas-fg:' + (fundoEscuro(pg.tema.primaria) ? '#ffffff' : '#0f172a') + ';--etapas-badge:' + (fundoEscuro(pg.tema.primaria) ? 'rgba(255,255,255,.22)' : 'rgba(15,23,42,.14)') + ';--max:' + pg.tema.largura + 'px}' +
             '*{box-sizing:border-box}' +
             'html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}' +
             'body{margin:0;background:var(--bg);color:var(--fg);font-family:' + fonte + ';line-height:1.65;-webkit-font-smoothing:antialiased}' +
@@ -3236,9 +3510,9 @@
             '.sec-dobra-btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}' +
             '.sec-dobra-seta{display:inline-block;width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-2px);transition:transform .15s}' +
             '.sec-dobra:not([open]) .sec-dobra-seta{transform:rotate(-45deg) translateY(-2px)}' +
-            '.sec-dobra-rotulo--mostrar{display:none}' +
+            '.sec-dobra-rotulo--expandir{display:none}' +
             '.sec-dobra:not([open]) .sec-dobra-rotulo--ocultar{display:none}' +
-            '.sec-dobra:not([open]) .sec-dobra-rotulo--mostrar{display:inline}' +
+            '.sec-dobra:not([open]) .sec-dobra-rotulo--expandir{display:inline}' +
             '.sec--fundo-escuro .sec-dobra-btn{background:rgba(30,41,59,.9);border-color:rgba(255,255,255,.28)}' +
             '.sec--hero .sec-dobra-btn{top:90px;background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.45);color:#fff;box-shadow:none}' +
             '.sec--hero .sec-dobra-btn:hover{border-color:#fff}' +
@@ -3290,6 +3564,29 @@
             '.blk-video{display:inline-block;max-width:100%}' +
             '.blk-video-frame{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#0f172a}' +
             '.blk-video-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}' +
+            /* Etapas em chevrons: seqüência horizontal com rolagem quando não couber. */
+            '.blk--etapas{width:100%;max-width:100%}' +
+            '.blk-etapas{list-style:none;display:flex;align-items:stretch;gap:0;margin:0;padding:0 0 4px;overflow-x:auto;scrollbar-width:thin}' +
+            '.blk-etapa{flex:0 0 var(--etapa-larg,175px);position:relative;display:flex;flex-direction:column;justify-content:center;min-height:var(--etapa-alt,132px);margin-left:-14px;padding:18px 26px 18px 34px;background:var(--etapa-cor,var(--primary));color:var(--etapa-fg,var(--etapas-fg));clip-path:polygon(0 0,calc(100% - 16px) 0,100% 50%,calc(100% - 16px) 100%,0 100%,16px 50%)}' +
+            '.blk-etapa:first-child{margin-left:0;padding-left:20px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 50%,calc(100% - 16px) 100%,0 100%)}' +
+            '.blk-etapa:last-child{clip-path:polygon(0 0,100% 0,100% 100%,0 100%,16px 50%)}' +
+            '.blk-etapa:only-child{clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}' +
+            '.blk-etapa-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-bottom:8px;border-radius:50%;background:var(--etapa-badge,var(--etapas-badge));font-size:.8rem;font-weight:800;line-height:1}' +
+            '.blk-etapa-titulo{display:block;font-size:1rem;line-height:1.25;margin-bottom:6px}' +
+            '.blk-etapa-desc{display:block;font-size:.86rem;line-height:1.45;opacity:.92}' +
+            '.blk-etapa-link{display:inline-block;margin-top:10px;color:var(--etapa-fg,var(--etapas-fg));font-size:.86rem;font-weight:700;text-decoration:underline;text-underline-offset:3px}' +
+            '@media(max-width:640px){.blk-etapa{padding:14px 22px 14px 30px}.blk-etapa:first-child{padding-left:16px}}' +
+            '.blk-etapas--compactas .blk-etapa{display:block;min-height:0;padding:0;background:none;color:var(--fg);clip-path:none}' +
+            '.blk-etapas--compactas .blk-etapa:first-child,.blk-etapas--compactas .blk-etapa:last-child,.blk-etapas--compactas .blk-etapa:only-child{padding-left:0;clip-path:none}' +
+            '.blk-etapas--compactas .blk-etapa-corpo{display:flex;align-items:center;height:var(--etapa-alt,132px);padding:2px 16px 2px 24px;background:var(--etapa-cor,var(--primary));color:var(--etapa-fg,var(--etapas-fg));clip-path:polygon(0 0,calc(100% - 16px) 0,100% 50%,calc(100% - 16px) 100%,0 100%,16px 50%)}' +
+            '.blk-etapas--compactas .blk-etapa:first-child .blk-etapa-corpo{padding-left:12px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 50%,calc(100% - 16px) 100%,0 100%)}' +
+            '.blk-etapas--compactas .blk-etapa:last-child .blk-etapa-corpo{clip-path:polygon(0 0,100% 0,100% 100%,0 100%,16px 50%)}' +
+            '.blk-etapas--compactas .blk-etapa:only-child .blk-etapa-corpo{clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}' +
+            '.blk-etapas--compactas .blk-etapa-titulo{margin:0;font-size:.69rem;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+            '.blk-etapas--compactas .blk-etapa-desc{display:block;padding:6px 16px 0 24px;font-size:.72rem;line-height:1.35;opacity:.82}' +
+            '.blk-etapas--compactas .blk-etapa:first-child .blk-etapa-desc{padding-left:12px}' +
+            '.blk-etapas--compactas .blk-etapa-link{display:inline-block;margin:4px 16px 0 24px;color:var(--primary);font-size:.68rem;font-weight:700;text-decoration:underline;text-underline-offset:2px}' +
+            '.blk-etapas--compactas .blk-etapa:first-child .blk-etapa-link{margin-left:12px}' +
             '.blk--link .btn--link{background:none;color:var(--primary);padding:0;text-decoration:underline}' +
             '.blk-divisor{border:0;border-top:1px solid rgba(15,23,42,.14);margin:28px 0}' +
             '.site-menu{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;max-width:var(--max);margin:0 auto;padding:18px 24px;border-bottom:1px solid rgba(15,23,42,.1)}' +
